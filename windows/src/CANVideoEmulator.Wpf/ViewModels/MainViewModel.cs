@@ -928,7 +928,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         RecentCanCaption = RecentCan.Observed == 0
             ? $"newest {RecentCan.DisplayRows} frames"
             : $"newest {RecentCan.Rows.Count} of {RecentCan.Observed:N0} frames seen";
-        _session.TickVideoSync();
+        _session.TickPlayback();
     }
 
     private static string Format(TimeSpan value) =>

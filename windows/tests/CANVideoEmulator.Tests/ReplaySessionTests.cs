@@ -439,6 +439,41 @@ public class ReplaySessionTests : IDisposable
     }
 
     [Fact]
+    public void ReachingTheEndAdvancesInDemoModeWhereTheSchedulerNeverCompletes()
+    {
+        // NotConnected transport: the scheduler transmits nothing and never
+        // reports completion, so only the clock-based end detection in
+        // TickPlayback can advance the playlist (the no-PCAN-hardware case).
+        _fixture.AddScenario("rav4_001", frameCount: 60);      // ~59 ms
+        _fixture.AddScenario("rav4_002", frameCount: 3000);
+        _fixture.AddPlaylists(("all", "All", ["rav4_001", "rav4_002"]));
+
+        var demoTransport = new NullCanTransport();
+        demoTransport.Open();
+        var demoScheduler = new CanScheduler(_clock, demoTransport);
+        var session = new ReplaySession(_clock, demoScheduler, _video,
+            ScenarioLibrary.Load(_fixture.Root),
+            new ReplaySessionOptions
+            {
+                TransitionGap = TimeSpan.FromMilliseconds(20),
+                LoopMode = LoopMode.PlaylistLoop,
+            });
+
+        session.LoadScenario("rav4_001");
+        session.Play();
+
+        // Jump straight to the end instead of waiting out the clock, then tick
+        // once: only the clock-based detection in TickPlayback can advance here.
+        _clock.SetPosition(session.Duration);
+        session.TickPlayback();
+
+        Assert.True(WaitUntil(() => session.Current?.ScenarioId == "rav4_002"),
+            $"still on {session.Current?.ScenarioId}");
+
+        demoScheduler.Stop();
+    }
+
+    [Fact]
     public void SingleScenarioLoopRestartsTheSameScenario()
     {
         _fixture.AddScenario("rav4_001", frameCount: 60);
