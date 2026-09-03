@@ -428,6 +428,7 @@
                     </Grid.ColumnDefinitions>
                     <Slider x:Name="SeekSlider" Style="{StaticResource SeekBar}"
                             Value="{Binding Progress, Mode=OneWay}"
+                            PreviewMouseLeftButtonDown="OnSeekPressed"
                             PreviewMouseLeftButtonUp="OnSeekBarReleased"
                             Thumb.DragStarted="OnSeekDragStarted"
                             Thumb.DragCompleted="OnSeekDragCompleted" />
