@@ -379,6 +379,37 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         private set => Set(ref _busStatisticsText, value);
     }
 
+    // -- HUD telemetry overlay (map, speed, IMU graphs) -----------------------
+
+    private GnssTrack? _gnss;
+    /// <summary>GNSS track for the trajectory map; null when the package has none.</summary>
+    public GnssTrack? Gnss { get => _gnss; private set => Set(ref _gnss, value); }
+
+    private ImuSeries? _imuAccel;
+    public ImuSeries? ImuAccel { get => _imuAccel; private set => Set(ref _imuAccel, value); }
+
+    private ImuSeries? _imuGyro;
+    public ImuSeries? ImuGyro { get => _imuGyro; private set => Set(ref _imuGyro, value); }
+
+    private ImuSeries? _imuMag;
+    public ImuSeries? ImuMag { get => _imuMag; private set => Set(ref _imuMag, value); }
+
+    private bool _hasMapOverlay;
+    /// <summary>True when GNSS is available, so the map/speed overlay is shown.</summary>
+    public bool HasMapOverlay { get => _hasMapOverlay; private set => Set(ref _hasMapOverlay, value); }
+
+    private bool _hasImuOverlay;
+    /// <summary>True when at least one IMU stream is available.</summary>
+    public bool HasImuOverlay { get => _hasImuOverlay; private set => Set(ref _hasImuOverlay, value); }
+
+    private double _telemetryTime;
+    /// <summary>Scenario time (s) the overlay renders at; bound to the graph/map controls.</summary>
+    public double TelemetryTime { get => _telemetryTime; private set => Set(ref _telemetryTime, value); }
+
+    private string _speedText = "--";
+    /// <summary>Interpolated GNSS speed in km/h, shown inside the map.</summary>
+    public string SpeedText { get => _speedText; private set => Set(ref _speedText, value); }
+
     public string ScenarioDirectory => _settings.EffectiveScenarioDirectory;
 
     public int ScenarioCount => _library.Scenarios.Count;
@@ -537,6 +568,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         VehicleText = package.Manifest.Vehicle;
         DurationText = Format(package.Duration);
         RecentCan.Clear();
+        LoadTelemetryOverlay(package);
 
         _suppressBusChange = true;
         AvailableBuses.Clear();
@@ -567,6 +599,24 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
                   $"({package.Duration.TotalSeconds:F1} s, buses " +
                   $"{string.Join(",", package.AvailableBuses)}, default {package.DefaultBus})");
     }
+
+    private void LoadTelemetryOverlay(ScenarioPackage package)
+    {
+        // Reading the sidecar touches the disk and parses JSON; keep it off the
+        // scenario-change path's critical work by tolerating a null result.
+        var telemetry = package.Telemetry;
+        Gnss = telemetry?.Gnss;
+        ImuAccel = FindImu(telemetry, "ACCEL");
+        ImuGyro = FindImu(telemetry, "GYRO");
+        ImuMag = FindImu(telemetry, "MAG");
+        HasMapOverlay = telemetry?.HasGnss == true;
+        HasImuOverlay = telemetry?.HasImu == true;
+        TelemetryTime = 0;
+        SpeedText = "--";
+    }
+
+    private static ImuSeries? FindImu(ScenarioTelemetry? telemetry, string label) =>
+        telemetry?.Imu.FirstOrDefault(s => s.Label == label);
 
     private void OnBusChanged(int bus)
     {
@@ -803,6 +853,14 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         DurationText = Format(_clock.Duration);
         _progress = _clock.Progress;
         Raise(nameof(Progress));
+
+        // Drive the HUD overlay (map/speed/IMU graphs) from the same clock.
+        TelemetryTime = position.TotalSeconds;
+        if (_gnss is { } gnss)
+        {
+            var kmh = gnss.SpeedAt(position.TotalSeconds);
+            SpeedText = double.IsNaN(kmh) ? "--" : kmh.ToString("F0");
+        }
 
         var state = _clock.State;
         IsPlaying = state == PlaybackState.Playing;

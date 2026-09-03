@@ -147,6 +147,116 @@
                             </StackPanel>
                         </Border>
                     </Grid>
+
+                    <!-- ===== HUD telemetry overlay: IMU graphs (left) + map & speed (right) ===== -->
+                    <Grid VerticalAlignment="Bottom" Margin="14" IsHitTestVisible="False">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- IMU: three muted 3-axis strip charts, rolling last 10 s -->
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom"
+                                    Visibility="{Binding HasImuOverlay, Converter={StaticResource BoolVisible}}">
+                            <StackPanel.Resources>
+                                <Style TargetType="Border" x:Key="ImuPanel">
+                                    <Setter Property="Background" Value="#520B0E13" />
+                                    <Setter Property="CornerRadius" Value="5" />
+                                    <Setter Property="Padding" Value="6,4" />
+                                    <Setter Property="Width" Value="120" />
+                                    <Setter Property="Margin" Value="0,0,6,0" />
+                                </Style>
+                                <Style TargetType="TextBlock" x:Key="ImuName">
+                                    <Setter Property="FontSize" Value="9" />
+                                    <Setter Property="FontWeight" Value="Bold" />
+                                    <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+                                    <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+                                </Style>
+                                <Style TargetType="TextBlock" x:Key="ImuUnit">
+                                    <Setter Property="FontSize" Value="8" />
+                                    <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                    <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                </Style>
+                            </StackPanel.Resources>
+
+                            <Border Style="{StaticResource ImuPanel}">
+                                <StackPanel>
+                                    <Grid>
+                                        <TextBlock Text="ACCEL" Style="{StaticResource ImuName}" />
+                                        <TextBlock Text="{Binding ImuAccel.Unit}" Style="{StaticResource ImuUnit}" />
+                                    </Grid>
+                                    <controls:RollingGraph Height="30" Margin="0,2,0,0"
+                                                           Series="{Binding ImuAccel}"
+                                                           CurrentTime="{Binding TelemetryTime}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource ImuPanel}">
+                                <StackPanel>
+                                    <Grid>
+                                        <TextBlock Text="GYRO" Style="{StaticResource ImuName}" />
+                                        <TextBlock Text="{Binding ImuGyro.Unit}" Style="{StaticResource ImuUnit}" />
+                                    </Grid>
+                                    <controls:RollingGraph Height="30" Margin="0,2,0,0"
+                                                           Series="{Binding ImuGyro}"
+                                                           CurrentTime="{Binding TelemetryTime}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource ImuPanel}">
+                                <StackPanel>
+                                    <Grid>
+                                        <TextBlock Text="MAG" Style="{StaticResource ImuName}" />
+                                        <TextBlock Text="{Binding ImuMag.Unit}" Style="{StaticResource ImuUnit}" />
+                                    </Grid>
+                                    <controls:RollingGraph Height="30" Margin="0,2,0,0"
+                                                           Series="{Binding ImuMag}"
+                                                           CurrentTime="{Binding TelemetryTime}" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                        <Rectangle Width="7" Height="2" Fill="#6C82A0" VerticalAlignment="Center" />
+                                        <TextBlock Text="fwd" FontSize="7.5" Margin="2,0,6,0" Foreground="{StaticResource TextMuted}" />
+                                        <Rectangle Width="7" Height="2" Fill="#7E947F" VerticalAlignment="Center" />
+                                        <TextBlock Text="right" FontSize="7.5" Margin="2,0,6,0" Foreground="{StaticResource TextMuted}" />
+                                        <Rectangle Width="7" Height="2" Fill="#A2937A" VerticalAlignment="Center" />
+                                        <TextBlock Text="down" FontSize="7.5" Margin="2,0,0,0" Foreground="{StaticResource TextMuted}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Map: trajectory kept centred, with GNSS speed in its corner -->
+                        <Border Grid.Column="2" VerticalAlignment="Bottom" Background="#520B0E13"
+                                CornerRadius="5" Padding="6,5" Width="142"
+                                Visibility="{Binding HasMapOverlay, Converter={StaticResource BoolVisible}}">
+                            <StackPanel>
+                                <TextBlock Text="MAP" FontSize="9" FontWeight="Bold"
+                                           Foreground="{StaticResource TextSecondary}"
+                                           FontFamily="{StaticResource UiFont}" Margin="0,0,0,3" />
+                                <Grid>
+                                    <Border Background="#380B0E13" CornerRadius="4" ClipToBounds="True">
+                                        <controls:TrajectoryMap Height="90"
+                                                                Gnss="{Binding Gnss}"
+                                                                CurrentTime="{Binding TelemetryTime}" />
+                                    </Border>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                                                VerticalAlignment="Bottom" Margin="0,0,4,3">
+                                        <TextBlock Text="{Binding SpeedText}" FontSize="19" FontWeight="Bold"
+                                                   Foreground="{StaticResource TextPrimary}"
+                                                   FontFamily="{StaticResource MonoFont}">
+                                            <TextBlock.Effect>
+                                                <DropShadowEffect Color="Black" BlurRadius="3" ShadowDepth="1" Opacity="0.9" />
+                                            </TextBlock.Effect>
+                                        </TextBlock>
+                                        <TextBlock Text="km/h" FontSize="9" Margin="2,0,0,3"
+                                                   VerticalAlignment="Bottom"
+                                                   Foreground="{StaticResource TextSecondary}"
+                                                   FontFamily="{StaticResource UiFont}" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
                     <TextBlock Text="Select a scenario to begin"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                FontSize="15" Foreground="{StaticResource TextMuted}"

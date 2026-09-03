@@ -87,6 +87,18 @@ public sealed class ScenarioManifest
     [JsonPropertyName("bus_statistics")] public List<BusStatistics> BusStatistics { get; set; } = [];
     [JsonPropertyName("build_warnings")] public List<string> BuildWarnings { get; set; } = [];
 
+    /// <summary>
+    /// Optional GNSS+IMU sidecar file name (under the scenario directory) that
+    /// drives the HUD overlay's map, speed readout and IMU graphs, or null when
+    /// the source segment carried no usable GNSS/IMU.
+    /// </summary>
+    /// <remarks>
+    /// Additive within <see cref="SupportedFormatVersion"/>: a build that predates
+    /// it leaves the key absent and the overlay simply stays hidden, so no version
+    /// bump is needed.
+    /// </remarks>
+    [JsonPropertyName("telemetry")] public string? Telemetry { get; set; }
+
     internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
