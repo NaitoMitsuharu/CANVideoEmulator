@@ -143,6 +143,8 @@ public partial class MainWindow : Window
 
     private void OnSeekBarReleased(object sender, MouseButtonEventArgs e) => Seek();
 
+    private void OnSeekDragStarted(object sender, RoutedEventArgs e) => _model?.BeginScrub();
+
     private void OnSeekDragCompleted(object sender, RoutedEventArgs e) => Seek();
 
     private void Seek() => _model?.SeekToProgress(SeekSlider.Value);

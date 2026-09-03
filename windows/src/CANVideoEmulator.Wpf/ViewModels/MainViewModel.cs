@@ -264,6 +264,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public string DurationText { get => _durationText; private set => Set(ref _durationText, value); }
 
     private double _progress;
+    private bool _isScrubbing;
     /// <summary>Seek bar value, 0..1. Setting it seeks (requirement 10).</summary>
     public double Progress
     {
@@ -401,6 +402,17 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private bool _hasImuOverlay;
     /// <summary>True when at least one IMU stream is available.</summary>
     public bool HasImuOverlay { get => _hasImuOverlay; private set => Set(ref _hasImuOverlay, value); }
+
+    // Per-sensor presence: comma2k19 recordings vary (RAV4 has no magnetometer,
+    // Civic does), so an absent stream's panel is hidden rather than shown empty.
+    private bool _hasImuAccel;
+    public bool HasImuAccel { get => _hasImuAccel; private set => Set(ref _hasImuAccel, value); }
+
+    private bool _hasImuGyro;
+    public bool HasImuGyro { get => _hasImuGyro; private set => Set(ref _hasImuGyro, value); }
+
+    private bool _hasImuMag;
+    public bool HasImuMag { get => _hasImuMag; private set => Set(ref _hasImuMag, value); }
 
     private double _telemetryTime;
     /// <summary>Scenario time (s) the overlay renders at; bound to the graph/map controls.</summary>
@@ -609,6 +621,9 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         ImuAccel = FindImu(telemetry, "ACCEL");
         ImuGyro = FindImu(telemetry, "GYRO");
         ImuMag = FindImu(telemetry, "MAG");
+        HasImuAccel = ImuAccel is not null;
+        HasImuGyro = ImuGyro is not null;
+        HasImuMag = ImuMag is not null;
         HasMapOverlay = telemetry?.HasGnss == true;
         HasImuOverlay = telemetry?.HasImu == true;
         TelemetryTime = 0;
@@ -831,14 +846,32 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     }
 
     /// <summary>Called when the user releases the seek bar (requirement 10).</summary>
+    /// <summary>
+    /// The user grabbed the seek thumb. While true the tick stops pushing the
+    /// clock position back onto the slider, so the thumb follows the drag instead
+    /// of snapping back 15 times a second.
+    /// </summary>
+    public void BeginScrub() => _isScrubbing = true;
+
     public void SeekToProgress(double fraction)
     {
+        _isScrubbing = false;
         if (_session.Current is null)
         {
             return;
         }
 
-        Run(() => _session.Seek(_session.Duration * Math.Clamp(fraction, 0, 1)));
+        // Seek to the released position and play from there. Seek keeps a running
+        // scenario running; if it was paused, start it so operating the bar always
+        // resumes playback from the new point.
+        Run(() =>
+        {
+            _session.Seek(_session.Duration * Math.Clamp(fraction, 0, 1));
+            if (!_clock.IsPlaying)
+            {
+                _session.Play();
+            }
+        });
     }
 
     private void Tick()
@@ -851,8 +884,11 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         var position = _clock.CurrentTime;
         PositionText = Format(position);
         DurationText = Format(_clock.Duration);
-        _progress = _clock.Progress;
-        Raise(nameof(Progress));
+        if (!_isScrubbing)
+        {
+            _progress = _clock.Progress;
+            Raise(nameof(Progress));
+        }
 
         // Drive the HUD overlay (map/speed/IMU graphs) from the same clock.
         TelemetryTime = position.TotalSeconds;
