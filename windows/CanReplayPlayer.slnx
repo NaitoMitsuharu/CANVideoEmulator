@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CanReplayPlayer.Core/CanReplayPlayer.Core.csproj" />
+    <Project Path="src/CanReplayPlayer.Pcan/CanReplayPlayer.Pcan.csproj" />
+    <Project Path="src/CanReplayPlayer.Scenarios/CanReplayPlayer.Scenarios.csproj" />
+    <Project Path="src/CanReplayPlayer.Video/CanReplayPlayer.Video.csproj" />
+    <Project Path="src/CanReplayPlayer.Wpf/CanReplayPlayer.Wpf.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CanReplayPlayer.Tests/CanReplayPlayer.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>CanReplayPlayer.Video</RootNamespace>
+    <AssemblyName>CanReplayPlayer.Video</AssemblyName>
+    <!-- MediaElement is a WPF control, so this project needs the WPF surface.
+         The Core, which owns IVideoPlayer, deliberately does not. -->
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CanReplayPlayer.Core\CanReplayPlayer.Core.csproj" />
+  </ItemGroup>
+</Project>

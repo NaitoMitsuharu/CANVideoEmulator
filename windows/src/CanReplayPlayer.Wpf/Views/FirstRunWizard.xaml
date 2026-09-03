@@ -1,0 +1,109 @@
+<Window x:Class="CanReplayPlayer.Wpf.Views.FirstRunWizard"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="CAN Vehicle Replay — Setup"
+        Width="720" Height="620"
+        Background="{StaticResource Background}"
+        Icon="/Assets/app.ico"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanMinimize">
+    <Grid Margin="26">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel>
+            <TextBlock Text="FIRST RUN SETUP" FontSize="18" FontWeight="Bold"
+                       Foreground="{StaticResource TextPrimary}"
+                       FontFamily="{StaticResource UiFont}" />
+            <TextBlock Text="Six checks, then this window will not appear again on this machine."
+                       FontSize="12" Margin="0,5,0,18"
+                       Foreground="{StaticResource TextSecondary}"
+                       FontFamily="{StaticResource UiFont}" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <!-- Step 1: scenarios -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="STEP 1" Style="{StaticResource Label}" />
+                            <TextBlock Text="  SCENARIO FOLDER" Style="{StaticResource Label}" />
+                        </StackPanel>
+                        <TextBlock x:Name="ScenarioPath" Style="{StaticResource Value}"
+                                   Margin="0,6,0,0" TextWrapping="Wrap" />
+                        <TextBlock x:Name="ScenarioResult" FontSize="12" Margin="0,6,0,0"
+                                   TextWrapping="Wrap" FontFamily="{StaticResource UiFont}" />
+                        <Button Content="Choose Folder…" Style="{StaticResource ToolButton}"
+                                HorizontalAlignment="Left" Margin="0,10,0,0"
+                                Click="OnChooseFolderClick" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Step 2 + 3: driver and devices -->
+                <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="STEP 2–3" Style="{StaticResource Label}" />
+                            <TextBlock Text="  PEAK DRIVER AND PCAN-USB" Style="{StaticResource Label}" />
+                        </StackPanel>
+                        <TextBlock x:Name="DriverResult" Style="{StaticResource Value}"
+                                   Margin="0,6,0,0" TextWrapping="Wrap" />
+                        <TextBlock x:Name="DriverDetail" FontSize="12" Margin="0,6,0,0"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontFamily="{StaticResource UiFont}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Content="Re-check" Style="{StaticResource ToolButton}"
+                                    Click="OnRecheckClick" />
+                            <Button x:Name="DriverPageButton" Content="Open PEAK Driver Download Page"
+                                    Style="{StaticResource ToolButton}" Margin="10,0,0,0"
+                                    Click="OnOpenDriverPageClick" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Step 4 + 5: channel and bitrate -->
+                <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="STEP 4–5" Style="{StaticResource Label}" />
+                            <TextBlock Text="  CHANNEL AND BIT RATE" Style="{StaticResource Label}" />
+                        </StackPanel>
+                        <TextBlock Text="CHANNEL" Style="{StaticResource Label}" Margin="0,10,0,0" />
+                        <ComboBox x:Name="ChannelBox" DisplayMemberPath="DisplayName"
+                                  Margin="0,4,0,0" />
+                        <TextBlock Text="BIT RATE" Style="{StaticResource Label}" Margin="0,12,0,0" />
+                        <ComboBox x:Name="BitrateBox" Margin="0,4,0,0" />
+                        <TextBlock Text="comma2k19 does not publish the bit rate its buses were captured at, so the scenarios carry no bit rate and this value is not checked against them. 500 kbit/s is the usual setting for the MCP2515 test rig."
+                                   FontSize="11" Margin="0,10,0,0" TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontFamily="{StaticResource UiFont}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Step 6 -->
+                <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="STEP 6" Style="{StaticResource Label}" />
+                            <TextBlock Text="  READY" Style="{StaticResource Label}" />
+                        </StackPanel>
+                        <TextBlock x:Name="ReadyText" Style="{StaticResource Value}"
+                                   Margin="0,6,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Margin="0,18,0,0">
+            <Button Content="Exit" Style="{StaticResource ToolButton}" Click="OnExitClick" />
+            <Button Content="Start" Style="{StaticResource PrimaryButton}" Margin="12,0,0,0"
+                    Click="OnStartClick" />
+        </StackPanel>
+    </Grid>
+</Window>

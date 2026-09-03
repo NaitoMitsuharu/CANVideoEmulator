@@ -1,0 +1,50 @@
+# ---- build output -------------------------------------------------------
+bin/
+obj/
+
+# ...except the one player build that is committed on purpose, so that a clone
+# has something runnable in it without a build step or a download. It is the
+# framework-dependent build (~0.7 MB) and needs the .NET 10 Desktop Runtime;
+# scripts/get_player.ps1 replaces it in place with the standalone build.
+# The rule above matches every directory called "bin" anywhere, so re-include
+# only the repository-root one, and only the single file inside it.
+!/bin/
+/bin/*
+!/bin/CanReplayPlayer.exe
+[Bb]uild/
+release/
+*.user
+*.suo
+.vs/
+
+# ---- Android ------------------------------------------------------------
+android/.gradle/
+android/local.properties
+android/**/build/
+*.apk
+*.aab
+*.keystore
+
+# ---- Python -------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# ---- Scenario data ------------------------------------------------------
+# Scenario Packages are large binary artifacts built from comma2k19 with the
+# Scenario Builder; they are distributed as release assets, not committed
+# (requirement 44). Delete this rule if you deliberately want them in git.
+/Scenarios/
+/data/
+*.canbin
+*.hevc
+video.mp4
+
+# ---- misc ---------------------------------------------------------------
+logs/
+*.log
+Thumbs.db
+.DS_Store

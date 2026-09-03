@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>CanReplayPlayer.Pcan</RootNamespace>
+    <AssemblyName>CanReplayPlayer.Pcan</AssemblyName>
+    <UseWPF>false</UseWPF>
+    <UseWindowsForms>false</UseWindowsForms>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- PEAK-System's official assembly. Requirement 17: use the current NuGet
+         package rather than copying an old PCANBasic.cs into the repository.
+         Note this package contains the managed wrapper ONLY; the native
+         PCANBasic.dll comes from the PEAK Windows driver setup (requirement 18). -->
+    <PackageReference Include="Peak.PCANBasic.NET" Version="5.1.0.1194" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CanReplayPlayer.Core\CanReplayPlayer.Core.csproj" />
+  </ItemGroup>
+</Project>

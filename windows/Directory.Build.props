@@ -1,0 +1,20 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <!-- WPF needs real culture data: XmlLanguage.GetSpecificCulture() throws under
+         InvariantGlobalization, which breaks every StringFormat binding. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <Version>1.0.0</Version>
+    <Authors>CAN Vehicle Replay</Authors>
+    <Product>CAN Vehicle Replay Player</Product>
+    <Company>CAN Vehicle Replay</Company>
+    <Copyright>Copyright (c) 2026</Copyright>
+    <RepositoryUrl>https://github.com/</RepositoryUrl>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scenario-builder"
+version = "1.0.0"
+description = "Build CAN Replay Scenario Packages from comma2k19 segments"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "pycapnp>=1.3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "cantools>=39"]
+
+[project.scripts]
+scenario-builder = "scenario_builder.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["scenario_builder*"]
+
+[tool.setuptools.package-data]
+scenario_builder = ["schema/*.capnp", "schema/include/*.capnp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
