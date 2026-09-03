@@ -224,6 +224,68 @@ def read_processed_can(segment: Segment) -> dict[str, ProcessedSignal]:
     return out
 
 
+def _load_series(base: Path) -> ProcessedSignal | None:
+    """Load a comma2k19 ``t``/``value`` numpy pair from a folder, if present."""
+    t_path, value_path = base / "t", base / "value"
+    if not (t_path.is_file() and value_path.is_file()):
+        return None
+    return ProcessedSignal(base.name,
+                           np.load(t_path, allow_pickle=False),
+                           np.load(value_path, allow_pickle=False))
+
+
+# Calibrated IMU series only; the uncalibrated/bias variants beside them are not
+# used for the overlay.  Each ``value`` is Nx3 in the device frame
+# [forward, right, down] (comma2k19 README): accelerometer in m/s^2, gyro in
+# rad/s, magnetometer in tesla.
+IMU_SERIES = ("accelerometer", "gyro", "magnetometer")
+
+
+def read_imu(segment: Segment) -> dict[str, ProcessedSignal]:
+    """Load ``processed_log/IMU/{accelerometer,gyro,magnetometer}`` (boot time)."""
+    base = segment.processed_log / "IMU"
+    out: dict[str, ProcessedSignal] = {}
+    if not base.is_dir():
+        return out
+    for name in IMU_SERIES:
+        sig = _load_series(base / name)
+        if sig is not None:
+            out[name] = sig
+    return out
+
+
+@dataclass(slots=True)
+class GnssTrack:
+    """Live GNSS fixes, boot-monotonic ``t`` in seconds."""
+
+    t: np.ndarray          # boot time (s)
+    lat: np.ndarray        # degrees
+    lon: np.ndarray        # degrees
+    speed_mps: np.ndarray  # metres per second
+    source: str            # which live_gnss folder it came from
+
+
+def read_live_gnss(segment: Segment) -> GnssTrack | None:
+    """Load ``processed_log/GNSS/live_gnss_*`` (ublox preferred, qcom fallback).
+
+    comma2k19 stores each fix as ``[latitude (deg), longitude (deg),
+    speed (m/s), utc_timestamp (s), altitude (m), bearing (deg)]``.  Only the
+    first three columns are needed for the map trajectory and speed readout.
+    """
+    base = segment.processed_log / "GNSS"
+    for name in ("live_gnss_ublox", "live_gnss_qcom"):
+        sig = _load_series(base / name)
+        if sig is None:
+            continue
+        value = np.asarray(sig.value, dtype=np.float64)
+        t = np.asarray(sig.t, dtype=np.float64)
+        if value.ndim != 2 or value.shape[1] < 3 or t.size != value.shape[0]:
+            continue
+        return GnssTrack(t=t, lat=value[:, 0], lon=value[:, 1],
+                         speed_mps=value[:, 2], source=name)
+    return None
+
+
 def read_raw_can_reference_times(segment: Segment) -> np.ndarray | None:
     """``processed_log/CAN/raw_can/t`` -- boot-monotonic seconds per raw frame.
 

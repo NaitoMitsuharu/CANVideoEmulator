@@ -20,6 +20,7 @@ Scenarios/
       signals.json         precomputed signal definitions for Android
     validation.json        decode checked against comma2k19 processed_log
     conversion.json        exactly how the video was transcoded
+    telemetry.json         optional GNSS + IMU sidecar for the HUD overlay
     debug/
       bus_0.jsonl          only with --jsonl; human-readable CAN dump
 ```
@@ -144,6 +145,53 @@ Beyond the fields requirement 33 lists, two carry reasoning worth stating:
   and the numbers behind it are recorded alongside so a tag can be traced back to
   why it applied (requirement 35). Judgements the CAN cannot support — "Traffic",
   road classification — are left for a human to add by editing the manifest.
+
+## `telemetry.json`
+
+Optional sidecar that drives the player's HUD overlay — the trajectory map,
+GNSS speed readout, and the three IMU graphs. It is written only when the source
+segment carried usable GNSS/IMU data; `scenario.json`'s `telemetry` key names the
+file (or is `null`). The field is **additive within `format_version` 1**: players
+that predate it ignore the key, and packages built before it still load, so no
+version bump is needed.
+
+Every sample is placed on the scenario timeline — `t` in seconds from the first
+CAN frame, the same t=0 the `.canbin` timeline and `video_can_offset_ms` use — so
+the player can look up "what was happening 3.2 s in" without touching the device
+boot clock.
+
+```
+{
+  "format_version": 1,
+  "gnss": {
+    "source": "live_gnss_ublox",     // ublox preferred, qcom fallback
+    "ref_lat": 37.5, "ref_lon": -122.3,
+    "t":         [...],               // s from first CAN frame
+    "speed_kmh": [...],               // live_gnss speed (m/s) × 3.6
+    "lat": [...], "lon": [...],
+    "east_m": [...], "north_m": [...] // local ENU metres from the ref fix
+  },
+  "imu": {
+    "accelerometer": { "unit": "m/s^2", "t": [...], "x": [...], "y": [...], "z": [...] },
+    "gyro":          { "unit": "rad/s", ... },
+    "magnetometer":  { "unit": "uT",    ... }   // tesla × 1e6
+  }
+}
+```
+
+Two deliberate reductions keep the file small and the graphs cheap to draw
+(`scenario_builder/scenario_builder/telemetry.py`):
+
+* GNSS fixes are kept at their recorded rate (a few hundred per minute) and also
+  projected to local east/north metres from a reference fix, so the player plots
+  the trajectory with no trigonometry of its own.
+* IMU streams are decimated to ~25 Hz. The graphs are ~100 px wide over a 10 s
+  window, so full sensor rate would be far more resolution than can be shown. The
+  `x`/`y`/`z` columns are the device-frame axes `[forward, right, down]`.
+
+The overlay shows a rolling 10 s window ending at the current playback time, so a
+seek to 30 s shows 20–30 s. `east_m`/`north_m` let the map keep the current
+position centred by translating the trajectory rather than reprojecting it.
 
 ## `signals.json`
 
