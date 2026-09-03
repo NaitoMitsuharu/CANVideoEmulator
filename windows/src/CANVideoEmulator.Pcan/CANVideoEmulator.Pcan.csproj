@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>CANVideoEmulator.Pcan</RootNamespace>
+    <AssemblyName>CANVideoEmulator.Pcan</AssemblyName>
+    <UseWPF>false</UseWPF>
+    <UseWindowsForms>false</UseWindowsForms>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="CANVideoEmulator.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- PEAK-System's official assembly. Requirement 17: use the current NuGet
+         package rather than copying an old PCANBasic.cs into the repository.
+         Note this package contains the managed wrapper ONLY; the native
+         PCANBasic.dll comes from the PEAK Windows driver setup (requirement 18). -->
+    <PackageReference Include="Peak.PCANBasic.NET" Version="5.1.0.1194" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CANVideoEmulator.Core\CANVideoEmulator.Core.csproj" />
+  </ItemGroup>
+</Project>

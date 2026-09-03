@@ -2,15 +2,6 @@
 bin/
 obj/
 
-# ...except the one player build that is committed on purpose, so that a clone
-# has something runnable in it without a build step or a download. It is the
-# framework-dependent build (~0.7 MB) and needs the .NET 10 Desktop Runtime;
-# scripts/get_player.ps1 replaces it in place with the standalone build.
-# The rule above matches every directory called "bin" anywhere, so re-include
-# only the repository-root one, and only the single file inside it.
-!/bin/
-/bin/*
-!/bin/CanReplayPlayer.exe
 [Bb]uild/
 release/
 *.user
@@ -48,3 +39,7 @@ logs/
 *.log
 Thumbs.db
 .DS_Store
+
+.tools/
+/comma2k19/
+/verify/

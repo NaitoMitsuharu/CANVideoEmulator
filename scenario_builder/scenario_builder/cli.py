@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
 import sys
 import traceback
@@ -15,6 +16,7 @@ from pathlib import Path
 
 from . import analyze_cli, builder, canbin, comma2k19, playlists, validation
 from .dbc import parse as parse_dbc
+from .progress import report as report_progress
 
 # opendbc's own platform table maps TOYOTA_RAV4 (RAV4 2016-2018, Toyota Safety
 # Sense P) to these two files: opendbc/car/toyota/values.py,
@@ -24,6 +26,29 @@ from .dbc import parse as parse_dbc
 # validation.json in each package.
 DEFAULT_RAV4_DBC = ["toyota_new_mc_pt_generated.dbc", "toyota_adas.dbc"]
 DEFAULT_RAV4_PROFILE = "toyota_rav4_2017"
+DEFAULT_CIVIC_DBC = ["honda_civic_touring_2016_can_generated.dbc", "acura_ilx_2016_nidec.dbc"]
+DEFAULT_CIVIC_PROFILE = "honda_civic_2016"
+
+
+def config_for_vehicle(config, segment, dbc_dir, use_default):
+    if use_default and segment.vehicle() == ("Honda", "Civic"):
+        return replace(config, dbc_paths=_resolve_dbc(dbc_dir, DEFAULT_CIVIC_DBC),
+                       dbc_profile=DEFAULT_CIVIC_PROFILE, candidate_dbc_paths={},
+                       scenario_prefix="civic" if config.scenario_prefix == "rav4" else config.scenario_prefix)
+    return config
+
+
+def reusable_package(path, segment, profile):
+    try:
+        document = json.loads((path / "scenario.json").read_text(encoding="utf-8"))
+        return (document["route"] == segment.route and
+                document["segment"] == segment.segment_index and
+                document["dbc_profile"] == profile and bool(document["video"]) and
+                (path / document["video"]).is_file() and
+                (path / "dbc/signals.json").is_file() and
+                all((path / "can" / name).is_file() for name in document["can"].values()))
+    except (OSError, ValueError, KeyError):
+        return False
 
 # Alternates scored alongside the selection so the manifest can show it won on
 # evidence rather than on assertion.
@@ -75,7 +100,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         candidate_dbc_paths={name: _resolve_dbc(dbc_dir, files)
                              for name, files in CANDIDATE_DBCS.items()
                              if not args.no_candidates},
-        crf=args.crf, preset=args.preset,
+        crf=args.crf, preset=args.preset, max_width=args.max_width,
         include_tx_echo=not args.exclude_tx_echo,
         write_jsonl=args.jsonl, skip_video=args.skip_video,
         playback_bitrate=args.playback_bitrate,
@@ -84,34 +109,55 @@ def cmd_build(args: argparse.Namespace) -> int:
     config.output_root.mkdir(parents=True, exist_ok=True)
 
     print(f"Found {len(segments)} segment(s) under {args.input}")
+    report_progress("build", 0, len(segments), "Starting conversion")
     built: list[dict] = []
     failures: list[tuple[str, str]] = []
+    existing_sources = {}
+    if args.skip_existing:
+        for manifest_path in config.output_root.glob("*/scenario.json"):
+            try:
+                saved = json.loads(manifest_path.read_text(encoding="utf-8"))
+                existing_sources[(saved["route"], saved["segment"], saved["dbc_profile"])] = manifest_path.parent
+            except (OSError, ValueError, KeyError):
+                continue
     for index, segment in enumerate(segments, start=args.start_index):
+        selected_config = config_for_vehicle(config, segment, dbc_dir,
+            args.dbc == DEFAULT_RAV4_DBC and args.dbc_profile == DEFAULT_RAV4_PROFILE)
+        target = config.output_root / f"{selected_config.scenario_prefix}_{index:03d}"
+        previous = existing_sources.get((segment.route, segment.segment_index, selected_config.dbc_profile), target)
+        if args.skip_existing and reusable_package(previous, segment, selected_config.dbc_profile):
+            print(f"  == Already converted: {previous.name}", flush=True)
+            built.append(json.loads((previous / "scenario.json").read_text(encoding="utf-8")))
+            report_progress("build", index - args.start_index + 1, len(segments), f"Reused {previous.name}")
+            continue
         try:
-            result = builder.build_segment(segment, config, scenario_index=index,
+            result = builder.build_segment(segment, selected_config, scenario_index=index,
                                            progress=lambda m: print("  " + m))
         except Exception as error:                      # keep going, report at the end
             failures.append((str(segment.path), f"{type(error).__name__}: {error}"))
             print(f"  !! {segment.path}: {error}", file=sys.stderr)
             if args.traceback:
                 traceback.print_exc()
+            report_progress("build", index - args.start_index + 1, len(segments), f"Failed: {segment.path.name}")
             continue
         built.append(json.loads((result.path / "scenario.json").read_text(encoding="utf-8")))
+        playlists.rebuild(config.output_root)
         buses = ", ".join(f"bus{b}={result.frame_counts[b]}" for b in result.buses)
         print(f"  == {result.scenario_id}: {result.duration_sec:.1f}s  {buses}  "
               f"default=bus{result.default_bus}  score={result.validation_score}  "
               f"tags={','.join(result.tags) or '-'}")
         for warning in result.warnings:
             print(f"     warning: {warning}")
+        report_progress("build", index - args.start_index + 1, len(segments), f"Converted {result.scenario_id}")
 
     if built:
-        playlists.write(config.output_root / "playlist.json", playlists.build(built))
+        playlists.rebuild(config.output_root)
         print(f"\nWrote {len(built)} scenario(s) and playlist.json to {config.output_root}")
     if failures:
         print(f"\n{len(failures)} segment(s) failed:", file=sys.stderr)
         for path, message in failures:
             print(f"  {path}: {message}", file=sys.stderr)
-    return 0 if built and not failures else (0 if built else 1)
+    return 0 if built and not failures else 1
 
 
 def cmd_inspect(args: argparse.Namespace) -> int:
@@ -172,7 +218,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
         print(f"No scenario.json found under {root}", file=sys.stderr)
         return 2
     problems = 0
-    for path in manifests:
+    report_progress("verify", 0, len(manifests), "Checking scenario packages")
+    for verified, path in enumerate(manifests, start=1):
         document = json.loads(path.read_text(encoding="utf-8"))
         base = path.parent
         for bus, name in document["can"].items():
@@ -194,6 +241,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
             problems += 1
         print(f"  ok {document['scenario_id']}: buses={document['available_buses']} "
               f"default={document['default_bus']} {document['duration_sec']}s")
+        report_progress("verify", verified, len(manifests), document["scenario_id"])
     print(f"\n{len(manifests)} scenario(s), {problems} problem(s)")
     return 1 if problems else 0
 
@@ -211,6 +259,7 @@ def main(argv: list[str] | None = None) -> int:
                               help="build at most N segments (0 = all)")
     build_parser.add_argument("--start-index", type=int, default=1)
     build_parser.add_argument("--prefix", default="rav4")
+    build_parser.add_argument("--max-width", type=int, default=0, help="maximum video width; 0 keeps source resolution")
     build_parser.add_argument("--crf", type=int, default=20)
     build_parser.add_argument("--preset", default="medium")
     build_parser.add_argument("--jsonl", action="store_true",
@@ -227,6 +276,7 @@ def main(argv: list[str] | None = None) -> int:
              "comma2k19 and is always recorded as null.")
     build_parser.add_argument("--overwrite", action="store_true", default=True)
     build_parser.add_argument("--traceback", action="store_true")
+    build_parser.add_argument("--skip-existing", action="store_true", help="reuse complete packages from the same source segment")
     build_parser.set_defaults(func=cmd_build)
 
     inspect_parser = sub.add_parser("inspect", help="summarise segments without building")

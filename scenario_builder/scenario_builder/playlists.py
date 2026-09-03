@@ -33,7 +33,7 @@ def build(scenarios: Sequence[dict], *, featured_count: int = 10) -> dict:
         },
         {
             "playlist_id": "all",
-            "title": f"All {ordered[0]['vehicle_model'] if ordered else 'Scenarios'}",
+            "title": "All Scenarios",
             "description": "Every scenario in this directory, in build order.",
             "scenario_ids": all_ids,
         },
@@ -62,14 +62,6 @@ def build(scenarios: Sequence[dict], *, featured_count: int = 10) -> dict:
                 "description": description, "scenario_ids": ids,
             })
 
-    # A deliberately small list for bring-up on the MCP2515 device under test.
-    playlists.append({
-        "playlist_id": "mcp2515_test",
-        "title": "MCP2515 Test",
-        "description": "Two short scenarios for verifying the CAN path end to end.",
-        "scenario_ids": all_ids[:2],
-    })
-
     return {
         "format_version": PLAYLIST_FORMAT_VERSION,
         "default_playlist": "featured",
@@ -82,3 +74,10 @@ def write(path: Path | str, document: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n",
                     encoding="utf-8")
+
+
+def rebuild(root: Path) -> None:
+    """Include previous builds when adding another chunk to a library."""
+    manifests = [json.loads(p.read_text(encoding="utf-8"))
+                 for p in sorted(root.glob("*/scenario.json"))]
+    write(root / "playlist.json", build(manifests))

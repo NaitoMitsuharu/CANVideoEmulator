@@ -3,7 +3,7 @@
 The exhibition player must not re-parse large JSON on every scenario load, so a
 CAN timeline is stored as a fixed-size record file that can be memory-mapped and
 binary-searched directly (see docs/scenario_package.md).  The identical layout is
-implemented by CanReplayPlayer.Core/Can/CanBinFile.cs -- keep them in sync.
+implemented by CANVideoEmulator.Core/Can/CanBinFile.cs -- keep them in sync.
 
 Layout (all little-endian)::
 

@@ -40,6 +40,7 @@ class BuilderConfig:
     dbc_profile: str
     candidate_dbc_paths: dict[str, list[Path]] = field(default_factory=dict)
     video_fps: float = video.DEFAULT_FPS
+    max_width: int = 0
     crf: int = 20
     preset: str = "medium"
     include_tx_echo: bool = True
@@ -151,7 +152,10 @@ def build_segment(segment: comma2k19.Segment, config: BuilderConfig, *,
         raise ValueError(f"{segment.path} contains no CAN frames")
 
     database = load_databases(config.dbc_paths)
-    default_bus, default_bus_reason = _choose_default_bus(raw.buses, database)
+    # Select the vehicle bus with the primary powertrain DBC. Radar can expose
+    # more message IDs on a separate bus (notably Civic), so merging radar first
+    # would otherwise make the radar-only bus the playback default.
+    default_bus, default_bus_reason = _choose_default_bus(raw.buses, load_databases(config.dbc_paths[:1]))
 
     progress(f"[{scenario_id}] writing CAN timelines")
     can_files: dict[int, str] = {}
@@ -186,7 +190,7 @@ def build_segment(segment: comma2k19.Segment, config: BuilderConfig, *,
     else:
         progress(f"[{scenario_id}] converting video ({fps:.3f} fps)")
         result = video.convert(segment.video_hevc, out_dir / video_name,
-                               fps=fps, crf=config.crf, preset=config.preset)
+                               fps=fps, crf=config.crf, preset=config.preset, max_width=config.max_width)
         video.make_thumbnail(segment.preview, out_dir / video_name,
                              out_dir / thumbnail_name)
         result.thumbnail = thumbnail_name

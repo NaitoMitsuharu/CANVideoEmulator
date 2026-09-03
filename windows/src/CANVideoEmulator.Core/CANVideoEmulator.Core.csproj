@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>CANVideoEmulator.Core</RootNamespace>
+    <AssemblyName>CANVideoEmulator.Core</AssemblyName>
+    <!-- Requirement 15: the Core carries no UI dependency of any kind. -->
+    <UseWPF>false</UseWPF>
+    <UseWindowsForms>false</UseWindowsForms>
+  </PropertyGroup>
+</Project>

@@ -71,7 +71,7 @@ Three, kept deliberately independent so a mistake in one cannot silently
 propagate:
 
 * `scenario_builder/scenario_builder/canbin.py` — writer and reader
-* `windows/src/CanReplayPlayer.Core/Can/CanTimeline.cs` — reader, memory-mapped
+* `windows/src/CANVideoEmulator.Core/Can/CanTimeline.cs` — reader, memory-mapped
   onto a `CanFrame` struct of exactly 20 bytes
 * `android/candecoder/.../CanBinReader.kt` — reader
 

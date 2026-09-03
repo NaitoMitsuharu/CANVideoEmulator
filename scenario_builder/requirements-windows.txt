@@ -1,0 +1,6 @@
+# Versions verified together on Windows x64 / Python 3.12.
+# Wheels only: a new PC does not need a C++ compiler or Cap'n Proto installation.
+numpy==2.5.2
+pycapnp==2.2.4
+Jinja2==3.1.6
+MarkupSafe==3.0.3

@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CANVideoEmulator.Core/CANVideoEmulator.Core.csproj" />
+    <Project Path="src/CANVideoEmulator.Pcan/CANVideoEmulator.Pcan.csproj" />
+    <Project Path="src/CANVideoEmulator.Scenarios/CANVideoEmulator.Scenarios.csproj" />
+    <Project Path="src/CANVideoEmulator.Video/CANVideoEmulator.Video.csproj" />
+    <Project Path="src/CANVideoEmulator.Wpf/CANVideoEmulator.Wpf.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CANVideoEmulator.Tests/CANVideoEmulator.Tests.csproj" />
+  </Folder>
+</Solution>

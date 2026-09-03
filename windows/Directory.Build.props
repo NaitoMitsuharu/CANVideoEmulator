@@ -10,11 +10,11 @@
          InvariantGlobalization, which breaks every StringFormat binding. -->
     <InvariantGlobalization>false</InvariantGlobalization>
     <Version>1.0.0</Version>
-    <Authors>CAN Vehicle Replay</Authors>
-    <Product>CAN Vehicle Replay Player</Product>
-    <Company>CAN Vehicle Replay</Company>
+    <Authors>CANVideoEmulator</Authors>
+    <Product>CANVideoEmulator</Product>
+    <Company>CANVideoEmulator</Company>
     <Copyright>Copyright (c) 2026</Copyright>
-    <RepositoryUrl>https://github.com/</RepositoryUrl>
+    <RepositoryUrl>https://github.com/NaitoMitsuharu/CANVideoEmulator</RepositoryUrl>
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
 </Project>

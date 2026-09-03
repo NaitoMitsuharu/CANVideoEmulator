@@ -45,6 +45,7 @@ def add_arguments(sub, *, add_common, resolve_dbc, default_dbc, default_profile,
                                  help="build only the top N recommendations (0 = all)")
     selected_parser.add_argument("--start-index", type=int, default=1)
     selected_parser.add_argument("--prefix", default="rav4")
+    selected_parser.add_argument("--max-width", type=int, default=0, help="maximum video width; 0 keeps source resolution")
     selected_parser.add_argument("--crf", type=int, default=20)
     selected_parser.add_argument("--preset", default="medium")
     selected_parser.add_argument("--playback-bitrate", type=int, default=500_000)
@@ -132,7 +133,7 @@ def cmd_build_selected(args: argparse.Namespace, *, resolve_dbc, candidate_dbcs)
         candidate_dbc_paths={name: resolve_dbc(dbc_dir, files)
                              for name, files in candidate_dbcs.items()
                              if not args.no_candidates},
-        crf=args.crf, preset=args.preset,
+        crf=args.crf, preset=args.preset, max_width=args.max_width,
         write_jsonl=args.jsonl, skip_video=args.skip_video,
         playback_bitrate=args.playback_bitrate,
         scenario_prefix=args.prefix, overwrite=True,
@@ -184,11 +185,11 @@ def cmd_build_selected(args: argparse.Namespace, *, resolve_dbc, candidate_dbcs)
               f"default=bus{result.default_bus}  category={category or '-'}")
 
     if built:
-        playlists.write(config.output_root / "playlist.json", playlists.build(built))
+        playlists.rebuild(config.output_root)
         print()
         print(f"Wrote {len(built)} scenario(s) and playlist.json to {config.output_root}")
 
     for path, message in failures:
         print(f"  failed: {path}: {message}", file=sys.stderr)
 
-    return 0 if built else 1
+    return 0 if built and not failures else 1

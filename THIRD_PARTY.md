@@ -25,8 +25,7 @@ wrapper is designed to be.
 
 ## Things this repository does **not** contain
 
-* **The PEAK PCAN driver and `PCANBasic.dll`.** PEAK does not permit
-  redistribution, so they are installed separately from
+* **The PEAK PCAN driver and `PCANBasic.dll`.** They are installed separately from
   <https://www.peak-system.com/quick/DrvSetup>. Only the PCAN-Basic.NET NuGet
   package is referenced, and it is restored from nuget.org rather than vendored.
 * **opendbc DBC files.** The Toyota DBCs are generated from templates rather
@@ -37,3 +36,11 @@ wrapper is designed to be.
 * **Any vehicle-manufacturer or board-vendor SDK.** The Android app talks to a
   CAN bridge through the `CanSource` interface and ships no implementation of
   one, so nothing proprietary is needed to build or test it.
+
+## Reproducible downloads (not vendored)
+
+`assets/comma2k19-example.json` identifies ten files from comma2k19 commit
+`4c7f1a6e1957745beadc1def0e7225f559b09a2a`; the dataset is published by comma.ai.
+`scripts/prepare_scenarios.ps1` fetches opendbc commit
+`3e92d112129507debe45364891954db70238997a` into the ignored `.tools` directory.
+Refer to those repositories' license files when redistributing generated assets.

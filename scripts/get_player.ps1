@@ -1,34 +1,10 @@
 <#
 .SYNOPSIS
-    Fetch a ready-to-run CanReplayPlayer.exe from the repository's GitHub releases.
-
+    Download an existing CANVideoEmulator GitHub Release into bin/.
 .DESCRIPTION
-    A clone already contains bin\CanReplayPlayer.exe, but that is the
-    framework-dependent build: it needs the .NET 10 Desktop Runtime installed.
-    This script fetches a build from the repository's GitHub Releases instead --
-    by default the self-contained one, which runs on any Windows 10/11 x64
-    machine with no prerequisites at all.
-
-    The large builds are not committed because a self-contained WPF build is
-    about 59 MB and cannot be trimmed, and git cannot delta-compress a
-    compressed single-file executable, so every version would be stored in full
-    and stay in history permanently. Release assets have no size or bandwidth
-    limit, are not part of a clone, and do not count towards repository size.
-
-    The download is written over bin\CanReplayPlayer.exe, so git will report
-    that file as modified afterwards. That is expected.
-
-.PARAMETER Variant
-    'self-contained' (default) runs on any Windows 10/11 x64 machine with no
-    prerequisites. 'netdesktop' is under a megabyte but needs the .NET 10 Desktop
-    Runtime installed.
-
-.PARAMETER Destination
-    Where to put the executable. Defaults to a 'bin' folder beside this repository.
-
-.EXAMPLE
-    pwsh -File scripts/get_player.ps1
-    pwsh -File scripts/get_player.ps1 -Variant netdesktop
+    Requires a published release with the new product name. To build the checked
+    out source instead, use scripts/setup.ps1. Downloads are ignored by Git.
+    Hardware output requires the separately installed PEAK driver and PCAN-Basic.
 #>
 [CmdletBinding()]
 param(
@@ -71,7 +47,7 @@ $api = if ($Tag -eq 'latest') {
 }
 
 try {
-    $release = Invoke-RestMethod -Uri $api -Headers @{ 'User-Agent' = 'CanReplayPlayer' }
+    $release = Invoke-RestMethod -Uri $api -Headers @{ 'User-Agent' = 'CANVideoEmulator' }
 } catch {
     throw "Could not read releases from $api. " +
           "If the repository is private, run 'gh auth login' and use " +
@@ -81,7 +57,7 @@ try {
 # The self-contained asset is the one WITHOUT the -netdesktop suffix, so match
 # on the suffix rather than on a substring that appears in both.
 $asset = $release.assets | Where-Object {
-    $_.name -like 'CanReplayPlayer-*-win-x64*.exe' -and
+    $_.name -like 'CANVideoEmulator-*-win-x64*.exe' -and
     (($Variant -eq 'netdesktop') -eq ($_.name -like '*-netdesktop.exe'))
 } | Select-Object -First 1
 
@@ -91,7 +67,7 @@ if (-not $asset) {
 }
 
 New-Item -ItemType Directory -Path $Destination -Force | Out-Null
-$target = Join-Path $Destination 'CanReplayPlayer.exe'
+$target = Join-Path $Destination 'CANVideoEmulator.exe'
 
 Write-Host "Release    : $($release.tag_name)"
 Write-Host ("Downloading: {0}  ({1:N1} MB)" -f $asset.name, ($asset.size / 1MB))

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>CANVideoEmulator.Scenarios</RootNamespace>
+    <AssemblyName>CANVideoEmulator.Scenarios</AssemblyName>
+    <UseWPF>false</UseWPF>
+    <UseWindowsForms>false</UseWindowsForms>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../../assets/comma2k19-example.json" LogicalName="comma2k19-example.json" />
+    <ProjectReference Include="..\CANVideoEmulator.Core\CANVideoEmulator.Core.csproj" />
+  </ItemGroup>
+</Project>

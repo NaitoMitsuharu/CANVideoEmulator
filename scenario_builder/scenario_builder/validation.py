@@ -147,6 +147,14 @@ TOYOTA_PROBES: list[SignalProbe] = [
     ),
 ]
 
+HONDA_PROBES: list[SignalProbe] = [
+    SignalProbe("speed", "ENGINE_DATA.XMISSION_SPEED", "ENGINE_DATA", ("XMISSION_SPEED",),
+                "km/h", convert=lambda v: v * KMH_TO_MS, scale_note="km/h -> m/s"),
+    SignalProbe("steering_angle", "STEERING_SENSORS.STEER_ANGLE", "STEERING_SENSORS", ("STEER_ANGLE",), "deg"),
+    SignalProbe("wheel_speed", "WHEEL_SPEEDS.WHEEL_SPEED_FL", "WHEEL_SPEEDS", ("WHEEL_SPEED_FL",),
+                "km/h", convert=lambda v: v * KMH_TO_MS, reference_column=0, scale_note="km/h -> m/s"),
+]
+
 REFERENCE_UNITS = {
     "speed": "m/s",
     "steering_angle": "deg",
@@ -267,9 +275,10 @@ def validate(frames: Sequence[CanFrame], database: Database, processed,
 
 def rank_databases(frames: Sequence[CanFrame], candidates: dict[str, Database],
                    processed, t_offset: float,
-                   probes: Sequence[SignalProbe] = TOYOTA_PROBES) -> list[ValidationReport]:
+                   probes: Sequence[SignalProbe] | None = None) -> list[ValidationReport]:
     """Score candidate DBCs against the same reference; best (lowest score) first."""
-    reports = [validate(frames, database, processed, t_offset, name, probes)
+    reports = [validate(frames, database, processed, t_offset, name,
+                        probes if probes is not None else (HONDA_PROBES if name.startswith("honda_civic") else TOYOTA_PROBES))
                for name, database in candidates.items()]
     reports.sort(key=lambda r: (r.score(), -len(r.decodable_message_ids)))
     return reports

@@ -1,0 +1,52 @@
+[
+  {
+    "path": "Example_1/b0c9d2329ad1606b_2018-08-02--08-34-47/40/global_pose/frame_times",
+    "size": 9728,
+    "url": "https://raw.githubusercontent.com/commaai/comma2k19/4c7f1a6e1957745beadc1def0e7225f559b09a2a/Example_1/b0c9d2329ad1606b%7C2018-08-02--08-34-47/40/global_pose/frame_times"
+  },
+  {
+    "path": "Example_1/b0c9d2329ad1606b_2018-08-02--08-34-47/40/preview.png",
+    "size": 496734,
+    "url": "https://raw.githubusercontent.com/commaai/comma2k19/4c7f1a6e1957745beadc1def0e7225f559b09a2a/Example_1/b0c9d2329ad1606b%7C2018-08-02--08-34-47/40/preview.png"
+  },
+  {
+    "path": "Example_1/b0c9d2329ad1606b_2018-08-02--08-34-47/40/processed_log/CAN/speed/t",
+    "size": 39920,
+    "url": "https://raw.githubusercontent.com/commaai/comma2k19/4c7f1a6e1957745beadc1def0e7225f559b09a2a/Example_1/b0c9d2329ad1606b%7C2018-08-02--08-34-47/40/processed_log/CAN/speed/t"
+  },
+  {
+    "path": "Example_1/b0c9d2329ad1606b_2018-08-02--08-34-47/40/processed_log/CAN/speed/value",
+    "size": 39920,
+    "url": "https://raw.githubusercontent.com/commaai/comma2k19/4c7f1a6e1957745beadc1def0e7225f559b09a2a/Example_1/b0c9d2329ad1606b%7C2018-08-02--08-34-47/40/processed_log/CAN/speed/value"
+  },
+  {
+    "path": "Example_1/b0c9d2329ad1606b_2018-08-02--08-34-47/40/processed_log/CAN/steering_angle/t",
+    "size": 39920,
+    "url": "https://raw.githubusercontent.com/commaai/comma2k19/4c7f1a6e1957745beadc1def0e7225f559b09a2a/Example_1/b0c9d2329ad1606b%7C2018-08-02--08-34-47/40/processed_log/CAN/steering_angle/t"
+  },
+  {
+    "path": "Example_1/b0c9d2329ad1606b_2018-08-02--08-34-47/40/processed_log/CAN/steering_angle/value",
+    "size": 39920,
+    "url": "https://raw.githubusercontent.com/commaai/comma2k19/4c7f1a6e1957745beadc1def0e7225f559b09a2a/Example_1/b0c9d2329ad1606b%7C2018-08-02--08-34-47/40/processed_log/CAN/steering_angle/value"
+  },
+  {
+    "path": "Example_1/b0c9d2329ad1606b_2018-08-02--08-34-47/40/processed_log/CAN/wheel_speed/t",
+    "size": 39920,
+    "url": "https://raw.githubusercontent.com/commaai/comma2k19/4c7f1a6e1957745beadc1def0e7225f559b09a2a/Example_1/b0c9d2329ad1606b%7C2018-08-02--08-34-47/40/processed_log/CAN/wheel_speed/t"
+  },
+  {
+    "path": "Example_1/b0c9d2329ad1606b_2018-08-02--08-34-47/40/processed_log/CAN/wheel_speed/value",
+    "size": 159296,
+    "url": "https://raw.githubusercontent.com/commaai/comma2k19/4c7f1a6e1957745beadc1def0e7225f559b09a2a/Example_1/b0c9d2329ad1606b%7C2018-08-02--08-34-47/40/processed_log/CAN/wheel_speed/value"
+  },
+  {
+    "path": "Example_1/b0c9d2329ad1606b_2018-08-02--08-34-47/40/raw_log.bz2",
+    "size": 6883752,
+    "url": "https://raw.githubusercontent.com/commaai/comma2k19/4c7f1a6e1957745beadc1def0e7225f559b09a2a/Example_1/b0c9d2329ad1606b%7C2018-08-02--08-34-47/40/raw_log.bz2"
+  },
+  {
+    "path": "Example_1/b0c9d2329ad1606b_2018-08-02--08-34-47/40/video.hevc",
+    "size": 37491754,
+    "url": "https://raw.githubusercontent.com/commaai/comma2k19/4c7f1a6e1957745beadc1def0e7225f559b09a2a/Example_1/b0c9d2329ad1606b%7C2018-08-02--08-34-47/40/video.hevc"
+  }
+]

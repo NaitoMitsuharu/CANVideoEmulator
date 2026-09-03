@@ -91,9 +91,11 @@ def probe(path: Path) -> dict:
 
 
 def convert(source_hevc: Path, output_mp4: Path, *, fps: float = DEFAULT_FPS,
-            crf: int = 20, preset: str = "medium",
+            crf: int = 20, preset: str = "medium", max_width: int = 0,
             overwrite: bool = True) -> ConversionResult:
     """Transcode a raw HEVC stream into a seekable H.264 MP4."""
+    if not 0 <= crf <= 51 or max_width < 0 or (max_width > 0 and max_width % 2):
+        raise ValueError("CRF must be 0..51; max_width must be zero or a positive even number")
     if not source_hevc.is_file():
         raise VideoConversionError(f"missing source video: {source_hevc}")
     output_mp4.parent.mkdir(parents=True, exist_ok=True)
@@ -122,6 +124,8 @@ def convert(source_hevc: Path, output_mp4: Path, *, fps: float = DEFAULT_FPS,
         "-movflags", "+faststart",
         str(output_mp4),
     ]
+    if max_width:
+        command[-1:-1] = ["-vf", f"scale=min({max_width}\\,iw):-2"]
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0 or not output_mp4.is_file():
         raise VideoConversionError(

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Build every release artifact for CAN Vehicle Replay (requirement 73).
+    Build every release artifact for CANVideoEmulator (requirement 73).
 
 .DESCRIPTION
     Runs the test suites, publishes a self-contained single-file EXE, assembles a
@@ -9,12 +9,12 @@
     Output layout (requirement 73):
         release/
           portable/
-            CanReplayPlayer.exe
+            CANVideoEmulator.exe
             portable.txt
             Scenarios/
-          CanReplayPlayer-portable-win-x64.zip
+          CANVideoEmulator-portable-win-x64.zip
           installer/
-            CanReplayPlayer-Setup-<version>-win-x64.exe
+            CANVideoEmulator-Setup-<version>-win-x64.exe
           checksums.txt
 
 .PARAMETER Version
@@ -71,6 +71,7 @@ function Write-Note($text) {
 # --------------------------------------------------------------------------
 function Resolve-Dotnet {
     $candidates = @(
+        (Join-Path $RepoRoot ".tools\dotnet\dotnet.exe"),
         (Join-Path $env:LOCALAPPDATA "Microsoft\dotnet\dotnet.exe"),
         (Join-Path $env:ProgramFiles "dotnet\dotnet.exe"),
         (Get-Command dotnet -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)
@@ -100,7 +101,7 @@ Write-Note "scenarios   : $ScenarioDir"
 # --------------------------------------------------------------------------
 if (-not $SkipTests) {
     Write-Step "Windows tests"
-    & $Dotnet test (Join-Path $WindowsRoot "CanReplayPlayer.slnx") `
+    & $Dotnet test (Join-Path $WindowsRoot "CANVideoEmulator.slnx") `
         -c Release --nologo -v minimal
     if ($LASTEXITCODE -ne 0) { throw "Windows tests failed." }
 
@@ -150,10 +151,13 @@ if (-not $SkipTests) {
 # libraries cannot be loaded from inside the bundle.
 # --------------------------------------------------------------------------
 Write-Step "Publishing self-contained single-file EXE"
-if (Test-Path $ReleaseRoot) { Remove-Item $ReleaseRoot -Recurse -Force }
+# Keep previous releases, including any local scenarios and portable settings.
+$ReleaseRoot = Join-Path $ReleaseRoot ("build-" + $Version + "-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$PortableDir = Join-Path $ReleaseRoot "portable"
+$InstallerDir = Join-Path $ReleaseRoot "installer"
 New-Item -ItemType Directory -Path $PortableDir -Force | Out-Null
 
-& $Dotnet publish (Join-Path $WindowsRoot "src\CanReplayPlayer.Wpf\CanReplayPlayer.Wpf.csproj") `
+& $Dotnet publish (Join-Path $WindowsRoot "src\CANVideoEmulator.Wpf\CANVideoEmulator.Wpf.csproj") `
     -c Release `
     -r win-x64 `
     -p:SelfContained=true `
@@ -167,7 +171,7 @@ New-Item -ItemType Directory -Path $PortableDir -Force | Out-Null
     --nologo -v minimal
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed." }
 
-$exe = Join-Path $PortableDir "CanReplayPlayer.exe"
+$exe = Join-Path $PortableDir "CANVideoEmulator.exe"
 if (-not (Test-Path $exe)) { throw "publish did not produce $exe" }
 Write-Note ("self-contained EXE: {0:N1} MB" -f ((Get-Item $exe).Length / 1MB))
 
@@ -182,7 +186,7 @@ Write-Note ("self-contained EXE: {0:N1} MB" -f ((Get-Item $exe).Length / 1MB))
 # --------------------------------------------------------------------------
 Write-Step "Publishing framework-dependent EXE"
 $FrameworkDir = Join-Path $ReleaseRoot "framework-dependent"
-& $Dotnet publish (Join-Path $WindowsRoot "src\CanReplayPlayer.Wpf\CanReplayPlayer.Wpf.csproj") `
+& $Dotnet publish (Join-Path $WindowsRoot "src\CANVideoEmulator.Wpf\CANVideoEmulator.Wpf.csproj") `
     -c Release `
     -r win-x64 `
     -p:SelfContained=false `
@@ -194,13 +198,13 @@ $FrameworkDir = Join-Path $ReleaseRoot "framework-dependent"
     --nologo -v minimal
 if ($LASTEXITCODE -ne 0) { throw "framework-dependent publish failed." }
 
-$smallExe = Join-Path $FrameworkDir "CanReplayPlayer.exe"
+$smallExe = Join-Path $FrameworkDir "CANVideoEmulator.exe"
 Write-Note ("framework-dependent EXE: {0:N2} MB (needs the .NET 10 Desktop Runtime)" -f `
     ((Get-Item $smallExe).Length / 1MB))
 
 # The portable build keeps its settings and logs beside the EXE so it can run
 # from a USB stick without leaving anything in the user profile.
-"This file makes CAN Vehicle Replay run in portable mode: settings and logs are" +
+"This file makes CANVideoEmulator run in portable mode: settings and logs are" +
 "`r`nstored beside the executable instead of in %APPDATA%. Delete it to use the" +
 "`r`nnormal per-user location." | Set-Content (Join-Path $PortableDir "portable.txt")
 
@@ -240,15 +244,15 @@ $AssetDir = Join-Path $ReleaseRoot "assets"
 New-Item -ItemType Directory -Path $AssetDir -Force | Out-Null
 
 # Bare, self-contained: download one file, double-click, no prerequisites.
-Copy-Item $exe (Join-Path $AssetDir "CanReplayPlayer-$Version-win-x64.exe")
+Copy-Item $exe (Join-Path $AssetDir "CANVideoEmulator-$Version-win-x64.exe")
 # Bare, framework-dependent: under a megabyte, needs the .NET Desktop Runtime.
-Copy-Item $smallExe (Join-Path $AssetDir "CanReplayPlayer-$Version-win-x64-netdesktop.exe")
+Copy-Item $smallExe (Join-Path $AssetDir "CANVideoEmulator-$Version-win-x64-netdesktop.exe")
 
 # Scenarios are a folder, so this one genuinely needs an archive.
 $scenarioZip = Join-Path $AssetDir "Scenarios-$Version.zip"
 
 Write-Step "Building the portable ZIP"
-$zip = Join-Path $ReleaseRoot "CanReplayPlayer-portable-win-x64.zip"
+$zip = Join-Path $ReleaseRoot "CANVideoEmulator-portable-win-x64.zip"
 Compress-Archive -Path (Join-Path $PortableDir "*") -DestinationPath $zip -CompressionLevel Optimal
 Write-Note ("{0}  ({1:N1} MB)" -f (Split-Path -Leaf $zip), ((Get-Item $zip).Length / 1MB))
 
@@ -289,7 +293,7 @@ if ($SkipInstaller) {
             "/DAppVersion=$Version" `
             "/DPublishDir=$PortableDir" `
             "/DOutputDir=$InstallerDir" `
-            (Join-Path $RepoRoot "installer\CanReplayPlayer.iss")
+            (Join-Path $RepoRoot "installer\CANVideoEmulator.iss")
         if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed." }
 
         Get-ChildItem $InstallerDir -Filter "*.exe" | ForEach-Object {
@@ -303,7 +307,7 @@ if ($SkipInstaller) {
 # --------------------------------------------------------------------------
 Write-Step "Writing checksums"
 $checksums = Join-Path $ReleaseRoot "checksums.txt"
-$lines = @("# CAN Vehicle Replay $Version", "# SHA256", "")
+$lines = @("# CANVideoEmulator $Version", "# SHA256", "")
 Get-ChildItem $ReleaseRoot -Recurse -File |
     Where-Object { $_.Extension -in ".exe", ".zip" } |
     Sort-Object FullName |

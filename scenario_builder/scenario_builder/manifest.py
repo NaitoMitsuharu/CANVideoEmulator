@@ -19,7 +19,7 @@ SCENARIO_FORMAT_VERSION = 1
 # the usual Toyota powertrain rate would be inventing a fact about the car.
 #
 # playback_bitrate is a property of the bench: the rate the PCAN-USB and the
-# MCP2515 are configured for.  It is a real, chosen number and belongs in the
+# receiving CAN nodes are configured for.  It is a real, chosen number and belongs in the
 # manifest so a package records the conditions it was meant to be played under.
 UNKNOWN_ORIGINAL_BITRATE = None
 DEFAULT_PLAYBACK_BITRATE = 500_000

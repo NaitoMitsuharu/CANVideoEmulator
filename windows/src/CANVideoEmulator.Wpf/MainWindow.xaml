@@ -1,0 +1,441 @@
+<Window x:Class="CANVideoEmulator.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:CANVideoEmulator.Wpf.ViewModels"
+        xmlns:controls="clr-namespace:CANVideoEmulator.Wpf.Controls"
+        xmlns:conv="clr-namespace:CANVideoEmulator.Wpf.Converters"
+        Title="CANVideoEmulator"
+        Icon="Assets/app.ico"
+        Background="{StaticResource Background}"
+        MinWidth="1180" MinHeight="720"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <conv:HealthToBrushConverter x:Key="HealthBrush" />
+        <conv:BoolToVisibilityConverter x:Key="BoolVisible" />
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolVisible" />
+        <conv:NullToVisibilityConverter x:Key="NullVisible" />
+        <conv:StringNotEmptyToVisibilityConverter x:Key="TextVisible" />
+        <conv:LoopModeNameConverter x:Key="LoopName" />
+        <conv:BitrateTextConverter x:Key="BitrateText" />
+    </Window.Resources>
+
+    <Window.InputBindings>
+        <KeyBinding Key="Space" Command="{Binding PlayPauseCommand}" />
+        <KeyBinding Key="Right" Command="{Binding SkipForwardCommand}" />
+        <KeyBinding Key="Left" Command="{Binding SkipBackwardCommand}" />
+        <KeyBinding Key="N" Modifiers="Control" Command="{Binding NextCommand}" />
+        <KeyBinding Key="P" Modifiers="Control" Command="{Binding PreviousCommand}" />
+    </Window.InputBindings>
+
+    <Grid x:Name="LayoutRoot" ClipToBounds="True">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />   <!-- title / PCAN status -->
+            <RowDefinition Height="Auto" />   <!-- driver banner -->
+            <RowDefinition Height="*" />      <!-- video + side panel -->
+            <RowDefinition Height="Auto" />   <!-- transport controls -->
+            <RowDefinition Height="Auto" />    <!-- scenario browser -->
+            <RowDefinition Height="Auto" />   <!-- status bar -->
+        </Grid.RowDefinitions>
+
+        <!-- ===================== Title bar ===================== -->
+        <Border Grid.Row="0" Background="{StaticResource Surface}"
+                BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1"
+                Padding="18,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="CANVideoEmulator" FontSize="17" FontWeight="Bold"
+                               Foreground="{StaticResource TextPrimary}"
+                               FontFamily="{StaticResource UiFont}" />
+                    <Border Background="{StaticResource SurfaceRaised}" CornerRadius="4"
+                            Padding="7,2" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="comma2k19 · recorded CAN" FontSize="11"
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontFamily="{StaticResource UiFont}" />
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- PCAN status pill, always visible (requirement 20) -->
+                    <Border Background="{StaticResource SurfaceRaised}" CornerRadius="16"
+                            Padding="14,6" BorderThickness="1"
+                            BorderBrush="{Binding PcanHealth, Converter={StaticResource HealthBrush}}">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="9" Height="9" VerticalAlignment="Center"
+                                     Fill="{Binding PcanHealth, Converter={StaticResource HealthBrush}}" />
+                            <TextBlock Text="PCAN-USB" Margin="9,0,7,0" FontSize="12"
+                                       FontWeight="SemiBold" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondary}"
+                                       FontFamily="{StaticResource UiFont}" />
+                            <TextBlock Text="{Binding PcanStatusText}" FontSize="12"
+                                       FontWeight="SemiBold" VerticalAlignment="Center"
+                                       FontFamily="{StaticResource UiFont}"
+                                       Foreground="{Binding PcanHealth,
+                                                    Converter={StaticResource HealthBrush}}" />
+                            <TextBlock Text="{Binding ChannelText, StringFormat=' · {0}'}"
+                                       FontSize="12" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextMuted}"
+                                       FontFamily="{StaticResource UiFont}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Button Content="Diagnostics" Style="{StaticResource ToolButton}"
+                            Margin="8,0,0,0" Click="OnDiagnosticsClick" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===================== Driver-missing banner (requirement 59) ============ -->
+        <Border Grid.Row="1" Background="#3A2A12" BorderBrush="{StaticResource Warn}"
+                BorderThickness="0,0,0,1" Padding="18,10"
+                Visibility="{Binding DriverMissing, Converter={StaticResource BoolVisible}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="PCAN-USB Driver is not installed."
+                               FontWeight="Bold" FontSize="13"
+                               Foreground="{StaticResource Warn}"
+                               FontFamily="{StaticResource UiFont}" />
+                    <TextBlock Text="{Binding PcanStatusDetail}" FontSize="12" Margin="0,3,0,0"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextSecondary}"
+                               FontFamily="{StaticResource UiFont}" />
+                </StackPanel>
+                <Button Grid.Column="1" Content="Open PEAK Driver Download Page"
+                        Style="{StaticResource ToolButton}" VerticalAlignment="Center"
+                        Click="OnOpenDriverPageClick" />
+            </Grid>
+        </Border>
+
+        <!-- ===================== Video + side panel ===================== -->
+        <Grid Grid.Row="2" Margin="18,14,18,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="460" MinWidth="400" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Video -->
+            <Border x:Name="VideoSurface" Style="{StaticResource Card}" Padding="0" Background="Black"
+                    ClipToBounds="True">
+                <Grid>
+                    <MediaElement x:Name="Video" Stretch="Uniform"
+                                  LoadedBehavior="Manual" UnloadedBehavior="Manual" />
+                    <Grid VerticalAlignment="Top" Margin="14" IsHitTestVisible="False">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <Border HorizontalAlignment="Left" VerticalAlignment="Top" Background="#520B0E13" CornerRadius="4" Padding="8,5" Margin="0,0,12,0">
+                            <TextBlock x:Name="VideoTitle" Text="{Binding ScenarioTitleText}" FontSize="14" FontWeight="SemiBold"
+                                       Foreground="#BDC4CC" TextTrimming="CharacterEllipsis" />
+                        </Border>
+                        <Border Grid.Column="1" VerticalAlignment="Top" Background="#520B0E13" CornerRadius="4" Padding="8,5">
+                            <StackPanel x:Name="TimingOverlay" MaxWidth="290" TextBlock.FontFamily="{StaticResource MonoFont}"
+                                        TextBlock.FontSize="11" TextBlock.Foreground="#939DA8">
+                                <TextBlock Text="{Binding FrameRateText, StringFormat='CAN {0} fps'}" TextAlignment="Right" />
+                                <TextBlock Text="{Binding FramesScheduledText, StringFormat='Scheduled {0}'}" TextAlignment="Right" />
+                                <TextBlock Text="{Binding FramesSentText, StringFormat='API accepted / demo {0}'}" TextAlignment="Right" />
+                                <TextBlock TextAlignment="Right"><Run Text="Errors " /><Run Text="{Binding ErrorsText, Mode=OneWay}" /><Run Text=" · Windows loss " /><Run Text="{Binding LossText, Mode=OneWay}" /></TextBlock>
+                                <TextBlock Text="{Binding JitterText, StringFormat='Jitter {0}'}" TextAlignment="Right" />
+                                <TextBlock Text="{Binding JitterDetailText}" TextAlignment="Right" TextWrapping="Wrap" FontSize="10"
+                                           Visibility="{Binding HasJitterDetail, Converter={StaticResource BoolVisible}}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <TextBlock Text="Select a scenario to begin"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               FontSize="15" Foreground="{StaticResource TextMuted}"
+                               FontFamily="{StaticResource UiFont}"
+                               Visibility="{Binding SelectedScenario,
+                                            Converter={StaticResource NullVisible}}" />
+                </Grid>
+            </Border>
+
+            <!-- Side panel -->
+            <Grid Grid.Column="1" Margin="14,0,0,0" ClipToBounds="True">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <Border Style="{StaticResource Card}" Padding="10">
+                        <StackPanel>
+                            <TextBlock Text="{Binding VehicleText}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" />
+                            <TextBlock Text="{Binding BusStatisticsText}" TextWrapping="Wrap" FontSize="11"
+                                       Foreground="{StaticResource TextSecondary}" Margin="0,3,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Row="1" Style="{StaticResource Card}" Padding="10" Margin="0,6,0,0">
+                        <StackPanel>
+                            <TextBlock Text="CAN OUTPUT" Style="{StaticResource SectionHeading}" />
+                            <CheckBox Content="Transmit to PCAN-USB"
+                                      IsChecked="{Binding UseHardware}"
+                                      ToolTip="Off = Demo Mode: video plays and the scheduler runs, but nothing reaches the bus." />
+                            <TextBlock Text="{Binding PcanStatusDetail}" TextWrapping="Wrap"
+                                       FontSize="11" Margin="0,8,0,0"
+                                       Foreground="{StaticResource TextMuted}"
+                                       FontFamily="{StaticResource UiFont}" />
+
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="1.5*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,6,0">
+                                    <TextBlock Text="CAN BUS" Style="{StaticResource Label}" />
+                                    <ComboBox ItemsSource="{Binding AvailableBuses}" SelectedItem="{Binding SelectedBus}" Margin="0,3,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="0,0,6,0">
+                                    <TextBlock Text="CHANNEL" Style="{StaticResource Label}" />
+                                    <ComboBox ItemsSource="{Binding PcanChannels}" SelectedItem="{Binding SelectedPcanChannel}"
+                                              Margin="0,3,0,0">
+                                        <ComboBox.ItemTemplate><DataTemplate>
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </DataTemplate></ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="BITRATE" Style="{StaticResource Label}" />
+                                    <ComboBox ItemsSource="{Binding Source={x:Static vm:MainViewModel.Bitrates}}"
+                                              SelectedItem="{Binding Bitrate}" Margin="0,3,0,0">
+                                        <ComboBox.ItemTemplate><DataTemplate>
+                                            <TextBlock Text="{Binding Converter={StaticResource BitrateText}}" />
+                                        </DataTemplate></ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Background="#3A2A12" CornerRadius="5" Padding="9" Margin="0,10,0,0"
+                                    Visibility="{Binding HasBitrateMismatch,
+                                                 Converter={StaticResource BoolVisible}}">
+                                <TextBlock Text="{Binding BitrateMismatchWarning}" TextWrapping="Wrap"
+                                           FontSize="11" Foreground="{StaticResource Warn}"
+                                           FontFamily="{StaticResource UiFont}" />
+                            </Border>
+                            <TextBlock Text="Scenario bit rate: unknown (not stated by comma2k19)"
+                                       FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextMuted}"
+                                       FontFamily="{StaticResource UiFont}"
+                                       Visibility="{Binding ScenarioBitrateUnknown,
+                                                    Converter={StaticResource BoolVisible}}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Row="2" Style="{StaticResource Card}" Padding="10" Margin="0,6,0,0" ClipToBounds="True">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                            <TextBlock Text="RECENT CAN" Style="{StaticResource SectionHeading}" />
+                            <Grid x:Name="RecentCanViewport" Grid.Row="1" SizeChanged="OnRecentCanSizeChanged" ClipToBounds="True">
+                                <DataGrid x:Name="RecentCanGrid" ItemsSource="{Binding RecentCan.Rows}" AutoGenerateColumns="False"
+                                          RowHeight="23" ColumnHeaderHeight="25" BorderThickness="0"
+                                          ScrollViewer.VerticalScrollBarVisibility="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                          IsHitTestVisible="False">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="60" />
+                                        <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="70" />
+                                        <DataGridTextColumn Header="DLC" Binding="{Binding Dlc}" Width="38" />
+                                        <DataGridTextColumn Header="Data" Binding="{Binding Data}" Width="*" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <TextBlock FontSize="11" Margin="0,32,0,0" Foreground="{StaticResource TextMuted}"
+                                           Text="No frames yet — press PLAY."
+                                           Visibility="{Binding HasRecentCan, Converter={StaticResource InverseBoolVisible}}" />
+                            </Grid>
+                            <TextBlock Grid.Row="2" FontSize="10.5" Margin="0,6,0,0" Text="{Binding RecentCanCaption}"
+                                       Foreground="{StaticResource TextMuted}" />
+                        </Grid>
+                    </Border>
+            </Grid>
+        </Grid>
+
+        <!-- ===================== Transport controls ===================== -->
+        <Border Grid.Row="3" Margin="18,14,18,0" Style="{StaticResource Card}">
+            <StackPanel>
+                <WrapPanel>
+
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="⏮ Previous" Style="{StaticResource ToolButton}"
+                                Command="{Binding PreviousCommand}" />
+                        <Button Content="◀◀ 10s" Style="{StaticResource ToolButton}" Margin="8,0,0,0"
+                                Command="{Binding SkipBackwardCommand}" />
+                        <Button Style="{StaticResource PrimaryButton}" Margin="8,0,0,0"
+                                Command="{Binding PlayPauseCommand}" MinWidth="120">
+                            <TextBlock>
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="▶  PLAY" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                                                <Setter Property="Text" Value="❚❚  PAUSE" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Button>
+                        <Button Content="■ Stop" Style="{StaticResource ToolButton}" Margin="8,0,0,0"
+                                Command="{Binding StopCommand}" />
+                        <Button Content="10s ▶▶" Style="{StaticResource ToolButton}" Margin="8,0,0,0"
+                                Command="{Binding SkipForwardCommand}" />
+                        <Button Content="Next ⏭" Style="{StaticResource ToolButton}" Margin="8,0,0,0"
+                                Command="{Binding NextCommand}" />
+                    </StackPanel>
+
+                    <StackPanel Margin="12,4,0,0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="PLAYLIST" Style="{StaticResource Label}"
+                                   VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <ComboBox ItemsSource="{Binding Playlists}" SelectedItem="{Binding SelectedPlaylist}"
+                                  MinWidth="170">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Title}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <TextBlock Text="LOOP" Style="{StaticResource Label}"
+                                   VerticalAlignment="Center" Margin="16,0,8,0" />
+                        <ComboBox ItemsSource="{Binding Source={x:Static vm:MainViewModel.LoopModes}}"
+                                  SelectedItem="{Binding LoopMode}" MinWidth="180">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Converter={StaticResource LoopName}}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </StackPanel>
+                </WrapPanel>
+
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Slider x:Name="SeekSlider" Style="{StaticResource SeekBar}"
+                            Value="{Binding Progress, Mode=OneWay}"
+                            PreviewMouseLeftButtonUp="OnSeekBarReleased"
+                            Thumb.DragCompleted="OnSeekDragCompleted" />
+                    <TextBlock Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center"
+                               Style="{StaticResource Mono}" FontSize="14">
+                        <Run Text="{Binding PositionText, Mode=OneWay}" />
+                        <Run Text=" / " Foreground="{StaticResource TextMuted}" />
+                        <Run Text="{Binding DurationText, Mode=OneWay}"
+                             Foreground="{StaticResource TextSecondary}" />
+                    </TextBlock>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ===================== Scenario browser (requirement 34) ================ -->
+        <Border x:Name="ScenarioDrawer" Grid.Row="0" Grid.RowSpan="6" Panel.ZIndex="100"
+                VerticalAlignment="Bottom" Height="300" Margin="18,0,18,38"
+                Style="{StaticResource Card}" Padding="14,12" Visibility="Hidden"
+                MouseEnter="OnScenarioAreaEnter" MouseLeave="OnScenarioAreaLeave"
+                GotKeyboardFocus="OnScenarioAreaFocus" LostKeyboardFocus="OnScenarioAreaBlur">
+            <Border.RenderTransform><TranslateTransform x:Name="DrawerTranslation" /></Border.RenderTransform>
+            <DockPanel>
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,10">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="SCENARIOS" Style="{StaticResource Label}"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding ScenarioCount, StringFormat=' ({0})'}"
+                                   Style="{StaticResource Label}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Text="{Binding ScenarioDirectory}" FontSize="11"
+                                   VerticalAlignment="Center" Margin="0,0,10,0"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontFamily="{StaticResource UiFont}"
+                                   TextTrimming="CharacterEllipsis" MaxWidth="520" />
+                        <Button Content="Get Scenarios…" Style="{StaticResource ToolButton}"
+                                Padding="10,5" Click="OnGetScenariosClick"
+                                ToolTip="Download recorded driving data from comma.ai's comma2k19 dataset." />
+                        <Button Content="Change Folder…" Style="{StaticResource ToolButton}"
+                                Margin="8,0,0,0" Padding="10,5" Click="OnChangeFolderClick" />
+                        <Button Content="Reload" Style="{StaticResource ToolButton}" Margin="8,0,0,0"
+                                Padding="10,5" Command="{Binding ReloadScenariosCommand}" />
+                    </StackPanel>
+                </Grid>
+
+                <ListBox x:Name="ScenarioList" Height="218" ItemsSource="{Binding Scenarios}"
+                         SelectedItem="{Binding SelectedScenario}" Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.CanContentScroll="False" controls:ScrollTuning.PixelsPerNotch="36">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate><controls:AdaptiveGridPanel MinimumItemWidth="300" MaximumColumns="5" Gap="6" /></ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                            <Setter Property="Template">
+                                <Setter.Value><ControlTemplate TargetType="ListBoxItem"><ContentPresenter /></ControlTemplate></Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Height="62" CornerRadius="5" BorderThickness="1"
+                                    Padding="5" Cursor="Hand" ToolTip="{Binding Tooltip}">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderBrush" Value="{StaticResource Border}" />
+                                        <Setter Property="Background" Value="{StaticResource SurfaceRaised}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+                                                <Setter Property="Background" Value="#233C58" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <Border Background="#0B0E13" CornerRadius="3" ClipToBounds="True">
+                                        <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="8,0,6,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TextPrimary}" />
+                                        <TextBlock Text="{Binding Vehicle}" FontSize="10.5" Margin="0,2,0,0" Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding TagsText}" FontSize="10" Margin="0,2,0,0" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{Binding DurationText}" FontSize="10.5" VerticalAlignment="Top" Margin="0,2,0,0"
+                                               Foreground="{StaticResource TextSecondary}" FontFamily="{StaticResource MonoFont}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- ===================== Status bar ===================== -->
+        <Border x:Name="ScenarioRevealArea" Grid.Row="5" Background="{StaticResource Surface}"
+                MouseEnter="OnScenarioAreaEnter" MouseLeave="OnScenarioAreaLeave"
+                BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0"
+                Padding="18,6" Margin="0,8,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding StatusMessage}" FontSize="12"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondary}"
+                           FontFamily="{StaticResource UiFont}" />
+                <Button x:Name="ScenarioRevealButton" Grid.Column="1" Content="Scenarios ↑" Margin="12,0,18,0"
+                        Style="{StaticResource ToolButton}" Padding="10,2" Click="OnShowScenariosClick"
+                        ToolTip="Move to the bottom edge to browse scenarios. Ctrl+B also opens the browser; Escape closes it." />
+                <TextBlock Grid.Column="2" Text="{Binding PlaybackStateText}" FontSize="12"
+                           FontWeight="SemiBold" VerticalAlignment="Center"
+                           Foreground="{StaticResource TextMuted}"
+                           FontFamily="{StaticResource UiFont}" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
