@@ -65,3 +65,37 @@ def test_build_telemetry_returns_none_without_gnss_or_imu(tmp_path):
     assert telemetry.build_telemetry(_segment(tmp_path), 0, warnings=warnings) is None
     assert any("GNSS" in w for w in warnings)
     assert any("IMU" in w for w in warnings)
+
+
+def test_ensure_for_package_tops_up_missing_telemetry_without_reencoding(tmp_path):
+    import json
+
+    # A source segment with GNSS + frame_times, and t0 reconstructable from the
+    # package's recorded video offset: video_can_offset_ms = (frame_times[0]-t0)*1000.
+    source = tmp_path / "source"
+    proc = source / "processed_log"
+    _write_series(proc / "GNSS" / "live_gnss_ublox",
+                  t=[1000.0, 1001.0],
+                  value=[[37.5, -122.3, 10.0, 0, 5, 90], [37.5, -122.3, 12.0, 0, 5, 90]])
+    (source / "global_pose").mkdir(parents=True)
+    np.save(source / "global_pose" / "frame_times", np.array([1000.05]), allow_pickle=False)
+    (source / "global_pose" / "frame_times").write_bytes(
+        (source / "global_pose" / "frame_times.npy").read_bytes())
+    (source / "global_pose" / "frame_times.npy").unlink()
+
+    package = tmp_path / "pkg"
+    package.mkdir()
+    # offset so that t0 = frame_times[0] - offset/1000 = 1000.05 - 0.05 = 1000.0 s.
+    (package / "scenario.json").write_text(
+        json.dumps({"scenario_id": "x", "video_can_offset_ms": 50.0}), encoding="utf-8")
+
+    segment = comma2k19.Segment(source, "99c94dc769b5d96e", "2018-05-01--08-13-53", 25)
+    assert telemetry.ensure_for_package(package, segment) is True
+
+    doc = json.loads((package / "telemetry.json").read_text(encoding="utf-8"))
+    assert doc["gnss"]["t"] == [0.0, 1.0]                      # rebased to t0=1000 s
+    manifest = json.loads((package / "scenario.json").read_text(encoding="utf-8"))
+    assert manifest["telemetry"] == "telemetry.json"
+
+    # Idempotent: a second call finds the sidecar already present.
+    assert telemetry.ensure_for_package(package, segment) is False

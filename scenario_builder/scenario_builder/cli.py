@@ -14,7 +14,7 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import analyze_cli, builder, canbin, comma2k19, playlists, validation
+from . import analyze_cli, builder, canbin, comma2k19, playlists, telemetry, validation
 from .dbc import parse as parse_dbc
 from .progress import report as report_progress
 
@@ -126,6 +126,10 @@ def cmd_build(args: argparse.Namespace) -> int:
         target = config.output_root / f"{selected_config.scenario_prefix}_{index:03d}"
         previous = existing_sources.get((segment.route, segment.segment_index, selected_config.dbc_profile), target)
         if args.skip_existing and reusable_package(previous, segment, selected_config.dbc_profile):
+            # Reuse the package, but top up the GNSS/IMU sidecar if it predates
+            # the telemetry feature -- cheap (no video re-encode) and idempotent.
+            if telemetry.ensure_for_package(previous, segment):
+                print(f"  ++ Added telemetry to {previous.name}", flush=True)
             print(f"  == Already converted: {previous.name}", flush=True)
             built.append(json.loads((previous / "scenario.json").read_text(encoding="utf-8")))
             report_progress("build", index - args.start_index + 1, len(segments), f"Reused {previous.name}")

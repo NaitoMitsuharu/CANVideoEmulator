@@ -19,7 +19,9 @@ Two deliberate reductions keep the file small and the graphs cheap to draw:
 
 from __future__ import annotations
 
+import json
 from math import cos, radians
+from pathlib import Path
 
 import numpy as np
 
@@ -117,3 +119,43 @@ def build_telemetry(segment: comma2k19.Segment, first_frame_mono_ns: int, *,
                     "will be empty for this scenario.")
 
     return document if have_any else None
+
+
+def ensure_for_package(package_dir: Path, segment: comma2k19.Segment) -> bool:
+    """Add ``telemetry.json`` to an already-converted package that lacks it.
+
+    Lets a re-run of the converter top up telemetry for packages built before it
+    existed, without re-encoding the video.  t=0 is reconstructed from the video
+    offset the package already recorded -- ``video_can_offset_ms =
+    (frame_times[0] - t0) * 1000`` -- so ``raw_log.bz2`` need not be parsed again.
+
+    Returns True when a new ``telemetry.json`` was written; False when the package
+    already had one, the segment carried no GNSS/IMU, or t=0 could not be
+    reconstructed (no ``frame_times``).
+    """
+    manifest_path = package_dir / "scenario.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+
+    name = manifest.get("telemetry")
+    if name and (package_dir / name).is_file():
+        return False
+
+    frame_times = comma2k19.read_frame_times(segment)
+    if frame_times is None or frame_times.size == 0:
+        return False
+    offset_ms = float(manifest.get("video_can_offset_ms", 0.0))
+    first_frame_mono_ns = int(round((float(frame_times[0]) - offset_ms / 1000.0) * 1e9))
+
+    document = build_telemetry(segment, first_frame_mono_ns)
+    if document is None:
+        return False
+
+    (package_dir / "telemetry.json").write_text(
+        json.dumps(document, ensure_ascii=False) + "\n", encoding="utf-8")
+    manifest["telemetry"] = "telemetry.json"
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return True
