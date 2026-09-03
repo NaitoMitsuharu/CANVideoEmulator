@@ -555,6 +555,28 @@ public sealed class ReplaySession : IAsyncDisposable
     private void StopTransmitting() => _scheduler.Stop();
 
     /// <summary>
+    /// Called on the UI tick: detect end-of-scenario, then keep the video synced.
+    /// </summary>
+    /// <remarks>
+    /// End-of-scenario normally comes from the CAN scheduler exhausting the
+    /// timeline. But in Demo Mode the transport is "not connected", so the
+    /// scheduler transmits nothing and never reports completion. The clock still
+    /// runs, so we also treat reaching the end of the clock as completion -- this
+    /// is what makes the playlist advance (and loop) with no PCAN hardware
+    /// attached. The <c>_completionHandled</c> guard keeps it from firing twice
+    /// when the scheduler has already reported the end.
+    /// </remarks>
+    public void TickPlayback()
+    {
+        if (_clock.IsPlaying && _clock.HasReachedEnd)
+        {
+            OnTimelineCompleted();
+        }
+
+        TickVideoSync();
+    }
+
+    /// <summary>
     /// Called on the UI tick: keep the picture within tolerance of the clock
     /// without seeking constantly (requirement 41).
     /// </summary>

@@ -14,6 +14,8 @@ public sealed class ScenarioPackage
 {
     private readonly Dictionary<int, CanTimeline> _timelines = [];
     private readonly object _gate = new();
+    private ScenarioTelemetry? _telemetry;
+    private bool _telemetryLoaded;
 
     private ScenarioPackage(string directory, ScenarioManifest manifest)
     {
@@ -50,6 +52,55 @@ public sealed class ScenarioPackage
         {
             var path = Path.Combine(Directory, "dbc", "signals.json");
             return File.Exists(path) ? path : null;
+        }
+    }
+
+    public string? TelemetryPath =>
+        string.IsNullOrEmpty(Manifest.Telemetry) ? null : Path.Combine(Directory, Manifest.Telemetry);
+
+    /// <summary>
+    /// The GNSS+IMU sidecar for the HUD overlay, or null when the package has
+    /// none. Loaded once, lazily; a missing or malformed file yields null rather
+    /// than an error, because the overlay is cosmetic and must never stop
+    /// playback.
+    /// </summary>
+    public ScenarioTelemetry? Telemetry
+    {
+        get
+        {
+            lock (_gate)
+            {
+                if (_telemetryLoaded)
+                {
+                    return _telemetry;
+                }
+            }
+
+            var loaded = LoadTelemetry();
+            lock (_gate)
+            {
+                _telemetry = loaded;
+                _telemetryLoaded = true;
+                return _telemetry;
+            }
+        }
+    }
+
+    private ScenarioTelemetry? LoadTelemetry()
+    {
+        var path = TelemetryPath;
+        if (path is null || !File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            return ScenarioTelemetry.Load(path);
+        }
+        catch
+        {
+            return null;
         }
     }
 

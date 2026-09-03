@@ -200,7 +200,8 @@ def build_scenario_json(*, scenario_id: str, title: str, vehicle_make: str,
                         can_files: dict[int, str],
                         bus_stats: Sequence[BusStatistics],
                         video_fps: float, video_frame_count: int | None,
-                        source_dongle_id: str) -> dict:
+                        source_dongle_id: str,
+                        telemetry: str | None = None) -> dict:
     """Assemble the scenario manifest (requirement 33)."""
     return {
         "format_version": SCENARIO_FORMAT_VERSION,
@@ -237,4 +238,9 @@ def build_scenario_json(*, scenario_id: str, title: str, vehicle_make: str,
         "description": description,
         "can": {str(bus): name for bus, name in sorted(can_files.items())},
         "bus_statistics": [s.as_dict() for s in bus_stats],
+        # Optional GNSS+IMU sidecar for the player's HUD overlay (map, speed,
+        # IMU graphs).  None when the source segment carried no usable GNSS/IMU;
+        # the field is additive within format_version 1, so players that predate
+        # it simply ignore it and older packages without it still load.
+        "telemetry": telemetry,
     }

@@ -141,7 +141,14 @@ public partial class MainWindow : Window
         left < SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - 100 &&
         top < SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight - 100;
 
+    // A track click doesn't raise Thumb.DragStarted, so start suppressing the
+    // clock->slider updates on mouse-down too; otherwise a tick between the click
+    // and release snaps the thumb back and we seek to the old position.
+    private void OnSeekPressed(object sender, MouseButtonEventArgs e) => _model?.BeginScrub();
+
     private void OnSeekBarReleased(object sender, MouseButtonEventArgs e) => Seek();
+
+    private void OnSeekDragStarted(object sender, RoutedEventArgs e) => _model?.BeginScrub();
 
     private void OnSeekDragCompleted(object sender, RoutedEventArgs e) => Seek();
 

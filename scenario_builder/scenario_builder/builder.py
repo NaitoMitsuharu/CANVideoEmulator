@@ -25,7 +25,8 @@ from typing import Callable, Sequence
 
 import numpy as np
 
-from . import canbin, comma2k19, manifest, signals as signals_mod, validation, video
+from . import (canbin, comma2k19, manifest, signals as signals_mod, telemetry,
+               validation, video)
 from .dbc import Database, parse as parse_dbc
 
 DATASET_NAME = "comma2k19"
@@ -241,6 +242,16 @@ def build_segment(segment: comma2k19.Segment, config: BuilderConfig, *,
     tags, evidence = manifest.auto_tags(default_frames, database)
     offset_ms = _video_can_offset_ms(segment, raw.first_frame_mono_ns, warnings)
 
+    progress(f"[{scenario_id}] extracting GNSS/IMU telemetry")
+    telemetry_name: str | None = None
+    telemetry_document = telemetry.build_telemetry(
+        segment, raw.first_frame_mono_ns, warnings=warnings)
+    if telemetry_document is not None:
+        telemetry_name = "telemetry.json"
+        (out_dir / telemetry_name).write_text(
+            json.dumps(telemetry_document, ensure_ascii=False) + "\n",
+            encoding="utf-8")
+
     document = manifest.build_scenario_json(
         scenario_id=scenario_id,
         title=f"{model} #{scenario_index:03d}",
@@ -260,6 +271,7 @@ def build_segment(segment: comma2k19.Segment, config: BuilderConfig, *,
                      f"{duration_sec:.1f} s of recorded {make} {model} driving."),
         can_files=can_files, bus_stats=stats,
         video_fps=fps, video_frame_count=frame_count,
+        telemetry=telemetry_name,
     )
     document["dbc_primary_file"] = primary_dbc
     document["build_warnings"] = warnings
