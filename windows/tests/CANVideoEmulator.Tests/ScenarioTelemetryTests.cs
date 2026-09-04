@@ -19,7 +19,6 @@ public class ScenarioTelemetryTests
         {
           "format_version": 1,
           "gnss": { "t": [0, 1, 2], "speed_kmh": [10, 20, 30],
-                                        "lat": [35, 35.1, 35.2], "lon": [139, 139.1, 139.2],
                     "east_m": [0, 5, 10], "north_m": [0, 0, 0] },
           "imu": {
             "magnetometer":  { "unit": "uT",    "t": [0, 1], "x": [1, 1], "y": [2, 2], "z": [3, 3] },
@@ -38,8 +37,6 @@ public class ScenarioTelemetryTests
             Assert.Equal(["ACCEL", "GYRO", "MAG"], telemetry.Imu.Select(s => s.Label));
             Assert.Equal("m/s^2", telemetry.Imu[0].Unit);
             Assert.Equal(3, telemetry.Gnss!.Count);
-                Assert.Equal(35.15, telemetry.Gnss.LatitudeAt(1.5));
-                Assert.Equal(139.15, telemetry.Gnss.LongitudeAt(1.5));
         }
         finally
         {
@@ -66,6 +63,35 @@ public class ScenarioTelemetryTests
         finally
         {
             File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void LatLonAreInterpolatedWhenPresentAndNaNWhenMissing()
+    {
+        var withLatLon = WriteTelemetry("""
+        { "gnss": { "t": [0, 2], "speed_kmh": [0, 0], "east_m": [0, 0], "north_m": [0, 0],
+                    "lat": [35.0, 35.002], "lon": [139.0, 139.001] } }
+        """);
+        var withoutLatLon = WriteTelemetry("""
+        { "gnss": { "t": [0, 2], "speed_kmh": [0, 0], "east_m": [0, 0], "north_m": [0, 0] } }
+        """);
+        try
+        {
+            var withCoords = ScenarioTelemetry.Load(withLatLon).Gnss!;
+            Assert.True(withCoords.HasLatLon);
+            Assert.Equal(35.001, withCoords.LatAt(1), 6);
+            Assert.Equal(139.0005, withCoords.LonAt(1), 6);
+
+            var withoutCoords = ScenarioTelemetry.Load(withoutLatLon).Gnss!;
+            Assert.False(withoutCoords.HasLatLon);
+            Assert.True(double.IsNaN(withoutCoords.LatAt(1)));
+            Assert.True(double.IsNaN(withoutCoords.LonAt(1)));
+        }
+        finally
+        {
+            File.Delete(withLatLon);
+            File.Delete(withoutLatLon);
         }
     }
 

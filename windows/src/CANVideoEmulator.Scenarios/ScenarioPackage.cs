@@ -16,6 +16,8 @@ public sealed class ScenarioPackage
     private readonly object _gate = new();
     private ScenarioTelemetry? _telemetry;
     private bool _telemetryLoaded;
+    private SignalTable? _signals;
+    private bool _signalsLoaded;
 
     private ScenarioPackage(string directory, ScenarioManifest manifest)
     {
@@ -101,6 +103,36 @@ public sealed class ScenarioPackage
         catch
         {
             return null;
+        }
+    }
+
+    /// <summary>
+    /// The matched DBC's bit layout, for live-decoding a few named signals on the
+    /// HUD. Only meaningful for <see cref="Manifest.DefaultBus"/> -- that is the
+    /// bus the DBC profile was actually scored against. Loaded once, lazily; a
+    /// missing or malformed signals.json yields null rather than an error, same
+    /// as <see cref="Telemetry"/>.
+    /// </summary>
+    public SignalTable? Signals
+    {
+        get
+        {
+            lock (_gate)
+            {
+                if (_signalsLoaded)
+                {
+                    return _signals;
+                }
+            }
+
+            var path = SignalsJsonPath;
+            var loaded = path is null ? null : SignalTable.TryLoad(path);
+            lock (_gate)
+            {
+                _signals = loaded;
+                _signalsLoaded = true;
+                return _signals;
+            }
         }
     }
 

@@ -99,6 +99,19 @@ public sealed class LoopModeNameConverter : IValueConverter
         throw new NotSupportedException();
 }
 
+/// <summary>True when a bound double is at or above the threshold in <c>ConverterParameter</c>.</summary>
+/// <remarks>Used to colour the bus-load bar without a code-behind event handler.</remarks>
+public sealed class ThresholdToBoolConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is double actual && parameter is string text &&
+        double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var threshold) &&
+        actual >= threshold;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 /// <summary>
 /// Bit rates as "500 kbit/s" rather than "500,000 bit/s".
 /// </summary>
