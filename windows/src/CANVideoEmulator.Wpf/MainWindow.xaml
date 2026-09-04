@@ -130,10 +130,18 @@
                                   LoadedBehavior="Manual" UnloadedBehavior="Manual" />
                     <Grid VerticalAlignment="Top" Margin="14" IsHitTestVisible="False">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                        <Border HorizontalAlignment="Left" VerticalAlignment="Top" Background="#520B0E13" CornerRadius="4" Padding="8,5" Margin="0,0,12,0">
-                            <TextBlock x:Name="VideoTitle" Text="{Binding ScenarioTitleText}" FontSize="14" FontWeight="SemiBold"
-                                       Foreground="#BDC4CC" TextTrimming="CharacterEllipsis" />
-                        </Border>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,0,12,0">
+                            <Border Background="#520B0E13" CornerRadius="4" Padding="8,5">
+                                <TextBlock x:Name="VideoTitle" Text="{Binding ScenarioTitleText}" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="#BDC4CC" TextTrimming="CharacterEllipsis" />
+                            </Border>
+                            <Border Background="#66D29922" CornerRadius="4" Padding="8,5" Margin="8,0,0,0"
+                                    Visibility="{Binding IsDemoMode, Converter={StaticResource BoolVisible}}"
+                                    ToolTip="No CAN interface is transmitting. Video and telemetry play, but nothing reaches a bus.">
+                                <TextBlock Text="DEMO MODE · no CAN output" FontSize="11" FontWeight="SemiBold"
+                                           Foreground="#F0D08A" FontFamily="{StaticResource UiFont}" />
+                            </Border>
+                        </StackPanel>
                         <Border Grid.Column="1" VerticalAlignment="Top" Background="#520B0E13" CornerRadius="4" Padding="8,5">
                             <StackPanel x:Name="TimingOverlay" MaxWidth="290" TextBlock.FontFamily="{StaticResource MonoFont}"
                                         TextBlock.FontSize="11" TextBlock.Foreground="#939DA8">
@@ -149,7 +157,8 @@
                     </Grid>
 
                     <!-- ===== HUD telemetry overlay: IMU graphs (left) + map & speed (right) ===== -->
-                    <Grid VerticalAlignment="Bottom" Margin="14" IsHitTestVisible="False">
+                    <Grid VerticalAlignment="Bottom" Margin="14" IsHitTestVisible="False"
+                          Visibility="{Binding ShowOverlay, Converter={StaticResource BoolVisible}}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -191,14 +200,6 @@
                                     <controls:RollingGraph Height="30" Margin="0,2,0,0"
                                                            Series="{Binding ImuAccel}"
                                                            CurrentTime="{Binding TelemetryTime}" />
-                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                        <Rectangle Width="7" Height="2" Fill="#6C82A0" VerticalAlignment="Center" />
-                                        <TextBlock Text="fwd" FontSize="7.5" Margin="2,0,6,0" Foreground="{StaticResource TextMuted}" />
-                                        <Rectangle Width="7" Height="2" Fill="#7E947F" VerticalAlignment="Center" />
-                                        <TextBlock Text="right" FontSize="7.5" Margin="2,0,6,0" Foreground="{StaticResource TextMuted}" />
-                                        <Rectangle Width="7" Height="2" Fill="#A2937A" VerticalAlignment="Center" />
-                                        <TextBlock Text="down" FontSize="7.5" Margin="2,0,0,0" Foreground="{StaticResource TextMuted}" />
-                                    </StackPanel>
                                 </StackPanel>
                             </Border>
                             <Border Style="{StaticResource ImuPanel}"
@@ -236,10 +237,12 @@
                                            Foreground="{StaticResource TextSecondary}"
                                            FontFamily="{StaticResource UiFont}" Margin="0,0,0,3" />
                                 <Grid>
-                                    <Border Background="#380B0E13" CornerRadius="4" ClipToBounds="True">
+                                    <Border Background="Transparent" CornerRadius="4" ClipToBounds="True">
                                         <controls:TrajectoryMap Height="90"
                                                                 Gnss="{Binding Gnss}"
-                                                                CurrentTime="{Binding TelemetryTime}" />
+                                                                CurrentTime="{Binding TelemetryTime}"
+                                                                HeadingUp="{Binding MapHeadingUp}"
+                                                                AutoZoom="{Binding MapAutoZoom}" />
                                     </Border>
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
                                                 VerticalAlignment="Bottom" Margin="0,0,4,3">
@@ -419,6 +422,15 @@
                             </ComboBox.ItemTemplate>
                         </ComboBox>
                     </StackPanel>
+
+                    <StackPanel Margin="16,4,0,0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <CheckBox Content="Overlay" IsChecked="{Binding ShowOverlay}" VerticalAlignment="Center"
+                                  ToolTip="Show the map, speed and IMU overlay on the video." />
+                        <CheckBox Content="Heading-up" IsChecked="{Binding MapHeadingUp}" Margin="12,0,0,0" VerticalAlignment="Center"
+                                  ToolTip="Rotate the map so the direction of travel points up." />
+                        <CheckBox Content="Auto-zoom" IsChecked="{Binding MapAutoZoom}" Margin="12,0,0,0" VerticalAlignment="Center"
+                                  ToolTip="Zoom the map out with speed, like a car navigator." />
+                    </StackPanel>
                 </WrapPanel>
 
                 <Grid Margin="0,14,0,0">
@@ -455,8 +467,37 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="SCENARIOS" Style="{StaticResource Label}"
                                    VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding ScenarioCount, StringFormat=' ({0})'}"
-                                   Style="{StaticResource Label}" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding PlaylistSummary}" FontSize="11"
+                                   VerticalAlignment="Center" Margin="10,0,0,0"
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontFamily="{StaticResource UiFont}" />
+                        <Border Background="{StaticResource SurfaceRaised}" CornerRadius="5"
+                                BorderBrush="{StaticResource Border}" BorderThickness="1"
+                                Margin="14,0,0,0" Padding="8,0" VerticalAlignment="Center">
+                            <Grid Width="200">
+                                <TextBlock Text="Filter by name, vehicle, tag…" FontSize="12"
+                                           VerticalAlignment="Center" IsHitTestVisible="False"
+                                           Foreground="{StaticResource TextMuted}"
+                                           FontFamily="{StaticResource UiFont}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ScenarioSearch}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBox Text="{Binding ScenarioSearch, UpdateSourceTrigger=PropertyChanged}"
+                                         Background="Transparent" BorderThickness="0" Height="26"
+                                         VerticalContentAlignment="Center" FontSize="12"
+                                         Foreground="{StaticResource TextPrimary}"
+                                         CaretBrush="{StaticResource TextPrimary}"
+                                         FontFamily="{StaticResource UiFont}" />
+                            </Grid>
+                        </Border>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                         <TextBlock Text="{Binding ScenarioDirectory}" FontSize="11"
