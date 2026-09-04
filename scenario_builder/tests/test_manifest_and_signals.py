@@ -191,4 +191,4 @@ def test_playlists_group_by_tag():
     assert by_id["high_speed"]["scenario_ids"] == ["rav4_001", "rav4_003"]
     assert by_id["braking"]["scenario_ids"] == ["rav4_002"]
     assert "winding" not in by_id                 # no scenario carries that tag
-    assert document["default_playlist"] == "featured"
+    assert document["default_playlist"] == "all"

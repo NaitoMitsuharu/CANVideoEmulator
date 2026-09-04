@@ -29,6 +29,26 @@
     <FontFamily x:Key="UiFont">Segoe UI</FontFamily>
     <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Courier New</FontFamily>
 
+    <!-- A faint tiled grid, like graph paper behind an oscilloscope trace. Used
+         only behind the HUD's small instrument readouts (map, IMU graphs, live
+         signal ticker); never at page scale, where it would just read as noise. -->
+    <DrawingBrush x:Key="InstrumentGrid" TileMode="Tile" Stretch="None"
+                  Viewport="0,0,9,9" ViewportUnits="Absolute" Opacity="0.5">
+        <DrawingBrush.Drawing>
+            <GeometryDrawing>
+                <GeometryDrawing.Pen>
+                    <Pen Brush="#232B36" Thickness="1" />
+                </GeometryDrawing.Pen>
+                <GeometryDrawing.Geometry>
+                    <GeometryGroup>
+                        <LineGeometry StartPoint="0,0" EndPoint="9,0" />
+                        <LineGeometry StartPoint="0,0" EndPoint="0,9" />
+                    </GeometryGroup>
+                </GeometryDrawing.Geometry>
+            </GeometryDrawing>
+        </DrawingBrush.Drawing>
+    </DrawingBrush>
+
     <!-- Text -->
     <Style x:Key="Label" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource UiFont}" />

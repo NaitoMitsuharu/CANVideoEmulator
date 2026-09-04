@@ -79,6 +79,14 @@ public sealed class ScenarioManifest
     [JsonPropertyName("dbc_profile")] public string? DbcProfile { get; set; }
     [JsonPropertyName("dbc_primary_file")] public string? DbcPrimaryFile { get; set; }
     [JsonPropertyName("tags")] public List<string> Tags { get; set; } = [];
+
+    /// <summary>
+    /// The measurements each tag in <see cref="Tags"/> was thresholded from
+    /// (requirement 35: no tag without traceable evidence). Optional -- absent
+    /// on a manifest built before this was captured.
+    /// </summary>
+    [JsonPropertyName("tag_evidence")] public TagEvidence? TagEvidence { get; set; }
+
     [JsonPropertyName("description")] public string Description { get; set; } = string.Empty;
 
     /// <summary>Bus index (as a string key) to .canbin file name under <c>can/</c>.</summary>
@@ -174,6 +182,41 @@ public sealed class BusStatistics
     [JsonPropertyName("duration_sec")] public double DurationSeconds { get; set; }
     [JsonPropertyName("tx_echo_frame_count")] public long TxEchoFrameCount { get; set; }
     [JsonPropertyName("extended_id_frame_count")] public long ExtendedIdFrameCount { get; set; }
+}
+
+/// <summary>The numbers behind <see cref="ScenarioManifest.Tags"/> (requirement 35).</summary>
+public sealed class TagEvidence
+{
+    [JsonPropertyName("speed_kmh")] public SpeedEvidence? Speed { get; set; }
+    [JsonPropertyName("steering_angle_deg")] public SteeringEvidence? Steering { get; set; }
+    [JsonPropertyName("cruise_active_fraction")] public FractionEvidence? Cruise { get; set; }
+    [JsonPropertyName("brake_pressed_fraction")] public FractionEvidence? Brake { get; set; }
+    [JsonPropertyName("gas_pedal_max_percent")] public ValueEvidence? Gas { get; set; }
+}
+
+public sealed class SpeedEvidence
+{
+    [JsonPropertyName("median")] public double Median { get; set; }
+    [JsonPropertyName("min")] public double Min { get; set; }
+    [JsonPropertyName("max")] public double Max { get; set; }
+}
+
+public sealed class SteeringEvidence
+{
+    [JsonPropertyName("max_abs")] public double MaxAbs { get; set; }
+    [JsonPropertyName("stdev")] public double Stdev { get; set; }
+}
+
+/// <summary>A 0..1 share of the segment (e.g. cruise/brake active).</summary>
+public sealed class FractionEvidence
+{
+    [JsonPropertyName("value")] public double Value { get; set; }
+}
+
+public sealed class ValueEvidence
+{
+    [JsonPropertyName("value")] public double Value { get; set; }
+    [JsonPropertyName("unit")] public string? Unit { get; set; }
 }
 
 public sealed class ScenarioException : Exception

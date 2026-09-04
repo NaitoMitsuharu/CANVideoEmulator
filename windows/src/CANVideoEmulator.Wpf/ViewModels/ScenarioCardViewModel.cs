@@ -1,4 +1,5 @@
 using System.IO;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using CANVideoEmulator.Scenarios;
@@ -38,9 +39,34 @@ public sealed class ScenarioCardViewModel : ObservableObject
 
     public IReadOnlyList<string> Tags => Package.Manifest.Tags;
 
-    public string TagsText => string.Join(" · ", Tags);
+    /// <summary>Tags with the measurement that earned them, e.g. "High Speed · 100km/h".</summary>
+    public IReadOnlyList<string> TagBadges =>
+        [.. Tags.Select(tag => FormatTagBadge(tag, Package.Manifest.TagEvidence))];
+
+    public string TagsText => string.Join(" · ", TagBadges);
 
     public bool HasTags => Package.Manifest.Tags.Count > 0;
+
+    private static string FormatTagBadge(string tag, TagEvidence? evidence) => tag switch
+    {
+        "High Speed" or "Low Speed" when evidence?.Speed is { } speed =>
+            $"{tag} · {speed.Median:F0}km/h",
+        "Speed Change" when evidence?.Speed is { } speed =>
+            $"{tag} · {speed.Max - speed.Min:F0}km/h span",
+        "Vehicle Stop" when evidence?.Speed is { } speed =>
+            $"{tag} · min {speed.Min:F0}km/h",
+        "Steering Active" when evidence?.Steering is { } steering =>
+            $"{tag} · {steering.MaxAbs:F0}°",
+        "Winding" when evidence?.Steering is { } steering =>
+            $"{tag} · σ{steering.Stdev:F1}°",
+        "Cruise" when evidence?.Cruise is { } cruise =>
+            $"{tag} · {cruise.Value * 100:F0}%",
+        "Braking" when evidence?.Brake is { } brake =>
+            $"{tag} · {brake.Value * 100:F0}%",
+        "Acceleration" when evidence?.Gas is { } gas =>
+            $"{tag} · {gas.Value:F0}%",
+        _ => tag,
+    };
 
     public string Tooltip =>
         $"{Package.Manifest.Title}\n" +
@@ -77,6 +103,66 @@ public sealed class ScenarioCardViewModel : ObservableObject
     }
 
     public bool HasThumbnail => Thumbnail is not null;
+
+    private bool _routeOverlayRequested;
+    private Geometry? _routeOverlay;
+
+    /// <summary>
+    /// The GNSS trajectory shape, normalised to a 100x100 box, for a small route
+    /// squiggle drawn over the thumbnail -- reuses <see cref="ScenarioPackage.Telemetry"/>,
+    /// so a scenario played later does not parse its telemetry.json twice.
+    /// </summary>
+    public Geometry? RouteOverlay
+    {
+        get
+        {
+            if (!_routeOverlayRequested)
+            {
+                _routeOverlayRequested = true;
+                _routeOverlay = BuildRouteOverlay();
+            }
+
+            return _routeOverlay;
+        }
+    }
+
+    public bool HasRouteOverlay => RouteOverlay is not null;
+
+    private Geometry? BuildRouteOverlay()
+    {
+        var gnss = Package.Telemetry?.Gnss;
+        if (gnss is null || gnss.Count < 2)
+        {
+            return null;
+        }
+
+        var east = gnss.EastM;
+        var north = gnss.NorthM;
+        var minE = east.Min();
+        var maxE = east.Max();
+        var minN = north.Min();
+        var maxN = north.Max();
+        var span = Math.Max(Math.Max(maxE - minE, maxN - minN), 1.0);
+        var scale = 100.0 / span;
+        var offsetX = (100 - (maxE - minE) * scale) / 2;
+        var offsetY = (100 - (maxN - minN) * scale) / 2;
+
+        Point Project(int i) => new(
+            offsetX + (east[i] - minE) * scale,
+            // Screen Y grows downward; flip so north is up, matching the map overlay.
+            100 - (offsetY + (north[i] - minN) * scale));
+
+        var figure = new PathFigure { StartPoint = Project(0), IsClosed = false };
+        for (var i = 1; i < gnss.Count; i++)
+        {
+            figure.Segments.Add(new LineSegment(Project(i), true));
+        }
+
+        var geometry = new PathGeometry();
+        geometry.Figures.Add(figure);
+        geometry.Freeze();
+        return geometry;
+    }
 
     private ImageSource? LoadThumbnail()
     {

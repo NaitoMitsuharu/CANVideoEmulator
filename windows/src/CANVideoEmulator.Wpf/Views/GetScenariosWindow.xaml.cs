@@ -195,6 +195,9 @@ public partial class GetScenariosWindow : Window
                 ConversionProgressText.Text = "100% · Conversion and verification complete";
                 ConvertStageText.Text = "Complete — scenarios have been added to the player.";
                 Append($"Ready: {_scenarioDirectory}");
+                // The player already picked up the new scenarios via
+                // ScenariosUpdated above; nothing left for the user to do here.
+                _closeAfterDownload = true;
             }
             else
             {
