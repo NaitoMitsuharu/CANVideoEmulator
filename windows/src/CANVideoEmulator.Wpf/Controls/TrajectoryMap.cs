@@ -100,7 +100,7 @@ public sealed class TrajectoryMap : FrameworkElement
         var rotated = HeadingUp;
         if (rotated)
         {
-            dc.PushTransform(new RotateTransform(-HeadingDeg(gnss), cx, cy));
+            dc.PushTransform(new RotateTransform(-HeadingDeg(gnss, curEast, curNorth), cx, cy));
         }
 
         dc.DrawGeometry(null, RoutePen, BuildPath(gnss.Count, 0, gnss.Count, Project));
@@ -139,20 +139,23 @@ public sealed class TrajectoryMap : FrameworkElement
         return Math.Clamp(1.6 + speed * 0.045, 1.6, 6.0);
     }
 
-    private double HeadingDeg(GnssTrack gnss)
+    private double HeadingDeg(GnssTrack gnss, double curEast, double curNorth)
     {
-        // Heading from the movement over the last ~2 s; hold the previous value
-        // while nearly stationary so the map doesn't spin on GPS noise.
+        // Heading from the movement over the last ~2 s (the current point is
+        // already interpolated by the caller). Hold the previous value while
+        // nearly stationary so the map doesn't spin on GPS noise.
         var t = gnss.T;
-        var e1 = ScenarioTelemetry.Interpolate(t, gnss.EastM, CurrentTime);
-        var n1 = ScenarioTelemetry.Interpolate(t, gnss.NorthM, CurrentTime);
         var e0 = ScenarioTelemetry.Interpolate(t, gnss.EastM, CurrentTime - 2.0);
         var n0 = ScenarioTelemetry.Interpolate(t, gnss.NorthM, CurrentTime - 2.0);
-        var de = e1 - e0;
-        var dn = n1 - n0;
+        var de = curEast - e0;
+        var dn = curNorth - n0;
         if (de * de + dn * dn >= 0.8 * 0.8)
         {
-            _lastHeadingDeg = Math.Atan2(de, dn) * (180.0 / Math.PI);
+            var target = Math.Atan2(de, dn) * (180.0 / Math.PI);
+            // Ease toward the target along the shortest arc so the map turns
+            // smoothly on curves instead of snapping frame to frame.
+            var delta = ((target - _lastHeadingDeg + 540.0) % 360.0) - 180.0;
+            _lastHeadingDeg += delta * 0.25;
         }
 
         return _lastHeadingDeg;

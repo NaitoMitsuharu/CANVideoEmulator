@@ -196,7 +196,15 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         get => _selectedPcanChannel;
         set
         {
-            if (_refreshingPcanUi || !Set(ref _selectedPcanChannel, value) || value is null)
+            var changed = Set(ref _selectedPcanChannel, value);
+            if (changed)
+            {
+                // Selecting/clearing a channel changes whether frames can actually
+                // be transmitted, so the Demo badge must re-evaluate.
+                Raise(nameof(IsDemoMode));
+            }
+
+            if (_refreshingPcanUi || !changed || value is null)
             {
                 return;
             }
@@ -271,8 +279,12 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    /// <summary>True while nothing is being transmitted to a real bus (no hardware output).</summary>
-    public bool IsDemoMode => !UseHardware;
+    /// <summary>
+    /// True while nothing can be reaching a real bus: either CAN output is off,
+    /// or it is on but no PCAN channel is selected to transmit through. Keeps the
+    /// "no CAN output" badge honest rather than trusting the checkbox alone.
+    /// </summary>
+    public bool IsDemoMode => !UseHardware || SelectedPcanChannel is null;
 
     // -- scenario browser: playlist filter + free-text search ------------------
 
@@ -291,9 +303,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     /// <summary>e.g. "Featured · 10 scenarios · playing 3 / 10".</summary>
     public string PlaylistSummary { get => _playlistSummary; private set => Set(ref _playlistSummary, value); }
 
+    // How many cards pass the current playlist + search filter (for the summary).
     private int _shownScenarioCount;
-    /// <summary>How many cards pass the current playlist + search filter.</summary>
-    public int ShownScenarioCount { get => _shownScenarioCount; private set => Set(ref _shownScenarioCount, value); }
 
     private bool FilterScenarioCard(object item)
     {
@@ -337,7 +348,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             view.Refresh();
         }
 
-        ShownScenarioCount = Scenarios.Count(FilterScenarioCard);
+        _shownScenarioCount = Scenarios.Count(FilterScenarioCard);
         UpdatePlaylistSummary();
     }
 
@@ -363,7 +374,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 
         if (_scenarioSearch.Trim().Length > 0)
         {
-            summary += $" · {ShownScenarioCount} shown";
+            summary += $" · {_shownScenarioCount} shown";
         }
 
         PlaylistSummary = summary;
@@ -708,9 +719,18 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         DurationText = Format(package.Duration);
         RecentCan.Clear();
         LoadTelemetryOverlay(package);
-        // Refresh (not just re-summarise): the now-playing card must appear even
-        // when the active playlist would otherwise filter it out.
-        RefreshScenarioFilter();
+        // Only re-filter when a playlist actually narrows the grid: the "keep the
+        // playing card visible" bypass changes which card is exempt as the
+        // current scenario moves. With no membership filter the visible set can't
+        // change, so just refresh the "playing X / Y" summary.
+        if (_playlistFilterIds is not null)
+        {
+            RefreshScenarioFilter();
+        }
+        else
+        {
+            UpdatePlaylistSummary();
+        }
 
         _suppressBusChange = true;
         AvailableBuses.Clear();
