@@ -19,6 +19,7 @@ public class ScenarioTelemetryTests
         {
           "format_version": 1,
           "gnss": { "t": [0, 1, 2], "speed_kmh": [10, 20, 30],
+                                        "lat": [35, 35.1, 35.2], "lon": [139, 139.1, 139.2],
                     "east_m": [0, 5, 10], "north_m": [0, 0, 0] },
           "imu": {
             "magnetometer":  { "unit": "uT",    "t": [0, 1], "x": [1, 1], "y": [2, 2], "z": [3, 3] },
@@ -37,6 +38,8 @@ public class ScenarioTelemetryTests
             Assert.Equal(["ACCEL", "GYRO", "MAG"], telemetry.Imu.Select(s => s.Label));
             Assert.Equal("m/s^2", telemetry.Imu[0].Unit);
             Assert.Equal(3, telemetry.Gnss!.Count);
+                Assert.Equal(35.15, telemetry.Gnss.LatitudeAt(1.5));
+                Assert.Equal(139.15, telemetry.Gnss.LongitudeAt(1.5));
         }
         finally
         {
