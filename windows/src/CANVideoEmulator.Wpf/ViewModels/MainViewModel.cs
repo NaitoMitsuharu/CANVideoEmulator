@@ -559,6 +559,9 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     /// <summary>Interpolated GNSS speed in km/h, shown inside the map.</summary>
     public string SpeedText { get => _speedText; private set => Set(ref _speedText, value); }
 
+        private string _coordinatesText = "lat --\nlng --";
+        public string CoordinatesText { get => _coordinatesText; private set => Set(ref _coordinatesText, value); }
+
     public string ScenarioDirectory => _settings.EffectiveScenarioDirectory;
 
     public int ScenarioCount => _library.Scenarios.Count;
@@ -778,6 +781,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         HasImuOverlay = telemetry?.HasImu == true;
         TelemetryTime = 0;
         SpeedText = "--";
+            CoordinatesText = "lat --\nlng --";
     }
 
     private static ImuSeries? FindImu(ScenarioTelemetry? telemetry, string label) =>
@@ -1046,6 +1050,11 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         {
             var kmh = gnss.SpeedAt(position.TotalSeconds);
             SpeedText = double.IsNaN(kmh) ? "--" : kmh.ToString("F0");
+                var latitude = gnss.LatitudeAt(position.TotalSeconds);
+                var longitude = gnss.LongitudeAt(position.TotalSeconds);
+                CoordinatesText = double.IsNaN(latitude) || double.IsNaN(longitude)
+                    ? "lat --\nlng --"
+                    : $"lat {latitude:F6}\nlng {longitude:F6}";
         }
 
         var state = _clock.State;

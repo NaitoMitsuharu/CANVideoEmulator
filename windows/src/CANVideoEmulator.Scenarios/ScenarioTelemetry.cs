@@ -58,6 +58,8 @@ public sealed class ScenarioTelemetry
                 gnss = new GnssTrack(
                     t,
                     ReadArrayAligned(g, "speed_kmh", t.Length),
+                        ReadArrayAligned(g, "lat", t.Length),
+                        ReadArrayAligned(g, "lon", t.Length),
                     ReadArrayAligned(g, "east_m", t.Length),
                     ReadArrayAligned(g, "north_m", t.Length));
             }
@@ -178,11 +180,19 @@ public sealed class ScenarioTelemetry
     }
 }
 
-/// <summary>GNSS fixes projected to local metres; speed already in km/h.</summary>
-public sealed class GnssTrack(double[] t, double[] speedKmh, double[] eastM, double[] northM)
+/// <summary>GNSS fixes with geographic coordinates and a local metre projection; speed is in km/h.</summary>
+public sealed class GnssTrack(
+    double[] t,
+    double[] speedKmh,
+    double[] latitude,
+    double[] longitude,
+    double[] eastM,
+    double[] northM)
 {
     public double[] T { get; } = t;
     public double[] SpeedKmh { get; } = speedKmh;
+    public double[] Latitude { get; } = latitude;
+    public double[] Longitude { get; } = longitude;
     public double[] EastM { get; } = eastM;
     public double[] NorthM { get; } = northM;
 
@@ -190,6 +200,10 @@ public sealed class GnssTrack(double[] t, double[] speedKmh, double[] eastM, dou
 
     /// <summary>Interpolated speed (km/h) at scenario time <paramref name="at"/>.</summary>
     public double SpeedAt(double at) => ScenarioTelemetry.Interpolate(T, SpeedKmh, at);
+
+    public double LatitudeAt(double at) => ScenarioTelemetry.Interpolate(T, Latitude, at);
+
+    public double LongitudeAt(double at) => ScenarioTelemetry.Interpolate(T, Longitude, at);
 }
 
 /// <summary>One IMU stream: three device-frame axes [forward, right, down].</summary>
