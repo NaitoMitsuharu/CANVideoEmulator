@@ -1,0 +1,20 @@
+# Treat these as binary so no platform's core.autocrlf setting can rewrite line
+# endings inside them (which would corrupt an .ico, image, or archive on clone).
+*.ico   binary
+*.icns  binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.bmp   binary
+*.mp4   binary
+*.hevc  binary
+*.bz2   binary
+*.zip   binary
+*.gz    binary
+*.dll   binary
+*.pdb   binary
+*.exe   binary
+*.snk   binary
+*.ttf   binary
+*.otf   binary

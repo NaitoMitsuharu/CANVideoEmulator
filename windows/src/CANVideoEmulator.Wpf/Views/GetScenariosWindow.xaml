@@ -34,6 +34,25 @@
                          SelectionMode="Multiple" SelectionChanged="OnChunkSelectionChanged"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="False"
                          controls:ScrollTuning.PixelsPerNotch="36">
+                    <!-- Minimal template: the default ListBox template paints its
+                         background with SystemColors.ControlBrush (white) when
+                         disabled, which flashes the whole panel white while a
+                         conversion is running (ChunkList.IsEnabled = false). -->
+                    <ListBox.Template>
+                        <ControlTemplate TargetType="ListBox">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    SnapsToDevicePixels="True">
+                                <ScrollViewer Focusable="False" Padding="{TemplateBinding Padding}"
+                                              VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"
+                                              HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                              CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}">
+                                    <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                                </ScrollViewer>
+                            </Border>
+                        </ControlTemplate>
+                    </ListBox.Template>
                     <ListBox.ItemsPanel>
                         <ItemsPanelTemplate><controls:AdaptiveGridPanel MinimumItemWidth="380" MaximumColumns="2" Gap="6" /></ItemsPanelTemplate>
                     </ListBox.ItemsPanel>
