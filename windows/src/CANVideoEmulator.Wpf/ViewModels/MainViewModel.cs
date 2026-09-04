@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
+using System.Windows.Data;
 using System.Windows.Threading;
 using CANVideoEmulator.Core.Can;
 using CANVideoEmulator.Core.Playback;
@@ -158,8 +160,19 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 
             _session.SelectPlaylist(value.PlaylistId);
             _settings.PlaylistId = value.PlaylistId;
+            ApplyPlaylistFilter(value);
             _log.Info($"playlist selected: {value.Title} ({value.Count} scenarios)");
         }
+    }
+
+    // "All Scenarios" shows everything; any other playlist narrows the grid to
+    // its members so the choice is visible, not just felt on Next/auto-advance.
+    private void ApplyPlaylistFilter(Playlist playlist)
+    {
+        _playlistFilterIds = string.Equals(playlist.PlaylistId, "all", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : new HashSet<string>(playlist.ScenarioIds, StringComparer.OrdinalIgnoreCase);
+        RefreshScenarioFilter();
     }
 
     private int _selectedBus;
@@ -253,9 +266,122 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             // Startup, hot-plug and checking this box never begin playback.
             ReleaseHardwareTransport();
 
+            Raise(nameof(IsDemoMode));
             RefreshPcanUi();
         }
     }
+
+    /// <summary>True while nothing is being transmitted to a real bus (no hardware output).</summary>
+    public bool IsDemoMode => !UseHardware;
+
+    // -- scenario browser: playlist filter + free-text search ------------------
+
+    // The selected playlist's members, or null for "All" (no membership filter).
+    private HashSet<string>? _playlistFilterIds;
+
+    private string _scenarioSearch = string.Empty;
+    /// <summary>Free-text filter over the scenario grid (id / title / vehicle / tags).</summary>
+    public string ScenarioSearch
+    {
+        get => _scenarioSearch;
+        set { if (Set(ref _scenarioSearch, value)) RefreshScenarioFilter(); }
+    }
+
+    private string _playlistSummary = string.Empty;
+    /// <summary>e.g. "Featured · 10 scenarios · playing 3 / 10".</summary>
+    public string PlaylistSummary { get => _playlistSummary; private set => Set(ref _playlistSummary, value); }
+
+    private int _shownScenarioCount;
+    /// <summary>How many cards pass the current playlist + search filter.</summary>
+    public int ShownScenarioCount { get => _shownScenarioCount; private set => Set(ref _shownScenarioCount, value); }
+
+    private bool FilterScenarioCard(object item)
+    {
+        if (item is not ScenarioCardViewModel card)
+        {
+            return false;
+        }
+
+        // The scenario that is playing stays visible whatever the playlist, so
+        // switching playlists never clears the selection out from under it.
+        var isCurrent = _session.Current is { } current
+            && string.Equals(card.ScenarioId, current.ScenarioId, StringComparison.OrdinalIgnoreCase);
+
+        if (!isCurrent && _playlistFilterIds is { } ids && !ids.Contains(card.ScenarioId))
+        {
+            return false;
+        }
+
+        var query = _scenarioSearch.Trim();
+        if (query.Length == 0)
+        {
+            return true;
+        }
+
+        return Match(card.Title, query) || Match(card.ScenarioId, query)
+            || Match(card.Vehicle, query) || Match(card.TagsText, query);
+    }
+
+    private static bool Match(string? text, string query) =>
+        text is not null && text.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+    private void RefreshScenarioFilter()
+    {
+        var view = CollectionViewSource.GetDefaultView(Scenarios);
+        if (view.Filter is null)
+        {
+            view.Filter = FilterScenarioCard;
+        }
+        else
+        {
+            view.Refresh();
+        }
+
+        ShownScenarioCount = Scenarios.Count(FilterScenarioCard);
+        UpdatePlaylistSummary();
+    }
+
+    private void UpdatePlaylistSummary()
+    {
+        var playlist = _selectedPlaylist;
+        if (playlist is null)
+        {
+            PlaylistSummary = string.Empty;
+            return;
+        }
+
+        var summary = $"{playlist.Title} · {playlist.Count} scenario" + (playlist.Count == 1 ? "" : "s");
+        var current = _session.Current;
+        if (current is not null)
+        {
+            var pos = playlist.IndexOf(current.ScenarioId);
+            if (pos >= 0)
+            {
+                summary += $" · playing {pos + 1} / {playlist.Count}";
+            }
+        }
+
+        if (_scenarioSearch.Trim().Length > 0)
+        {
+            summary += $" · {ShownScenarioCount} shown";
+        }
+
+        PlaylistSummary = summary;
+    }
+
+    // -- HUD overlay + map display options ------------------------------------
+
+    private bool _showOverlay = true;
+    /// <summary>Show the map / speed / IMU overlay on the video.</summary>
+    public bool ShowOverlay { get => _showOverlay; set => Set(ref _showOverlay, value); }
+
+    private bool _mapHeadingUp = true;
+    /// <summary>Rotate the trajectory map so the direction of travel points up.</summary>
+    public bool MapHeadingUp { get => _mapHeadingUp; set => Set(ref _mapHeadingUp, value); }
+
+    private bool _mapAutoZoom = true;
+    /// <summary>Zoom the map out with speed, like a car navigator.</summary>
+    public bool MapAutoZoom { get => _mapAutoZoom; set => Set(ref _mapAutoZoom, value); }
 
     private string _positionText = "00:00";
     public string PositionText { get => _positionText; private set => Set(ref _positionText, value); }
@@ -528,6 +654,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         if (_selectedPlaylist is not null)
         {
             _session.SelectPlaylist(_selectedPlaylist.PlaylistId);
+            ApplyPlaylistFilter(_selectedPlaylist);
         }
 
         Raise(nameof(SelectedPlaylist));
@@ -581,6 +708,9 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         DurationText = Format(package.Duration);
         RecentCan.Clear();
         LoadTelemetryOverlay(package);
+        // Refresh (not just re-summarise): the now-playing card must appear even
+        // when the active playlist would otherwise filter it out.
+        RefreshScenarioFilter();
 
         _suppressBusChange = true;
         AvailableBuses.Clear();
