@@ -132,6 +132,18 @@ public sealed class PcanManager : IDisposable
             return;
         }
 
+        lock (_gate)
+        {
+            // GetAttachedChannels is a global PCAN-Basic call. The native
+            // driver serializes it with writes, so polling it while replaying
+            // produces a periodic CAN transmission gap. An open channel is
+            // monitored by CanScheduler.RefreshStatus instead.
+            if (_transport is { IsOpen: true })
+            {
+                return;
+            }
+        }
+
         try
         {
             Refresh();

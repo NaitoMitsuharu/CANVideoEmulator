@@ -49,6 +49,9 @@ public sealed class CanScheduler : IAsyncDisposable
     /// </remarks>
     public static readonly TimeSpan HealthCheckInterval = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>Only report delays large enough to be visible to a human.</summary>
+    public static readonly TimeSpan TimingDiagnosticThreshold = TimeSpan.FromMilliseconds(50);
+
     private readonly PlaybackClock _clock;
     private readonly TimingStatistics _statistics = new();
     private readonly object _gate = new();
@@ -83,6 +86,12 @@ public sealed class CanScheduler : IAsyncDisposable
 
     /// <summary>Raised when the bus is found to be off during transmission.</summary>
     public event Action<CanTransportStatus>? BusHealthChanged;
+
+    /// <summary>
+    /// Raised for an exceptional scheduler, transport, or frame-consumer delay.
+    /// Subscribers must enqueue the message and return without blocking.
+    /// </summary>
+    public event Action<string>? TimingAnomaly;
 
     public bool IsRunning
     {
@@ -371,17 +380,36 @@ public sealed class CanScheduler : IAsyncDisposable
 
             var sentAt = _monotonic.Elapsed;
             var jitterMs = (sentAt - deadline).TotalMilliseconds;
+            if (jitterMs >= TimingDiagnosticThreshold.TotalMilliseconds)
+            {
+                TimingAnomaly?.Invoke($"scheduler late={jitterMs:F1} ms; " +
+                    $"scenario={frame.Timestamp.TotalSeconds:F3}s; id={frame.IdText()}");
+            }
 
             // Counted before the send, so scheduled always equals sent + errors
             // and an end-to-end loss figure has a denominator that means
             // "frames this timeline demanded".
             _statistics.RecordScheduled();
 
+            var sendStarted = _monotonic.Elapsed;
             var result = transport.Send(in frame);
+            var sendDuration = _monotonic.Elapsed - sendStarted;
+            if (sendDuration >= TimingDiagnosticThreshold)
+            {
+                TimingAnomaly?.Invoke($"transport.Send={sendDuration.TotalMilliseconds:F1} ms; " +
+                    $"scenario={frame.Timestamp.TotalSeconds:F3}s; id={frame.IdText()}");
+            }
             if (result.Success)
             {
                 _statistics.RecordSent(jitterMs, sentAt.TotalSeconds);
+                var consumersStarted = _monotonic.Elapsed;
                 FrameSent?.Invoke(frame);
+                var consumersDuration = _monotonic.Elapsed - consumersStarted;
+                if (consumersDuration >= TimingDiagnosticThreshold)
+                {
+                    TimingAnomaly?.Invoke($"FrameSent consumers={consumersDuration.TotalMilliseconds:F1} ms; " +
+                        $"scenario={frame.Timestamp.TotalSeconds:F3}s; id={frame.IdText()}");
+                }
             }
             else
             {

@@ -109,6 +109,31 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
 
+                <Grid Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="DOWNLOAD MODE" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <ComboBox x:Name="DownloadMode" Grid.Column="1" Width="175" SelectedIndex="0"
+                              SelectionChanged="OnDownloadModeChanged">
+                        <ComboBoxItem Content="Selected scenarios" Tag="partial" />
+                        <ComboBoxItem Content="Full chunk" Tag="full" />
+                    </ComboBox>
+                    <ComboBox x:Name="SegmentCount" Grid.Column="2" Width="145" Margin="8,0,0,0"
+                              SelectedIndex="1" SelectionChanged="OnDownloadModeChanged">
+                        <ComboBoxItem Content="1 per chunk" Tag="1" />
+                        <ComboBoxItem Content="3 per chunk" Tag="3" />
+                        <ComboBoxItem Content="5 per chunk" Tag="5" />
+                        <ComboBoxItem Content="10 per chunk" Tag="10" />
+                    </ComboBox>
+                    <TextBlock Grid.Column="3" Margin="10,0,0,0" VerticalAlignment="Center"
+                               Text="Only the ZIP index and selected scenario files are downloaded."
+                               TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource TextSecondary}" />
+                </Grid>
+
                 <TextBlock Text="DOWNLOAD TO" Style="{StaticResource Label}" Margin="0,10,0,0" />
                 <Grid Margin="0,4,0,0">
                     <Grid.ColumnDefinitions>
