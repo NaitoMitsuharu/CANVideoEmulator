@@ -22,6 +22,15 @@ public sealed class TimingStatistics
     /// <summary>Trailing span the frame rate is measured over.</summary>
     public const double RateWindowSeconds = 1.0;
 
+    /// <summary>Minimum interval between expensive percentile refreshes.</summary>
+    public const double PercentileRefreshSeconds = 0.5;
+
+    // Small snapshots are cheap and remain exact immediately. Larger windows
+    // are sampled and sorted on a worker so the WPF render tick never stalls
+    // playback, even when the CAN stream fills the 20k-frame ring.
+    private const int SynchronousPercentileSampleLimit = 2_048;
+    private const int PercentileSampleLimit = 1_024;
+
     /// <summary>
     /// No send within this long means the rate is reported as zero rather than
     /// as whatever it was before the stream stopped.
@@ -40,6 +49,10 @@ public sealed class TimingStatistics
     private int _timeNext;
     private int _timeFilled;
     private double _lastSendSeconds = double.NegativeInfinity;
+    private double _lastPercentileRequestSeconds = double.NegativeInfinity;
+    private long _statisticsGeneration;
+    private bool _percentileCalculationQueued;
+    private Percentiles _percentiles;
 
     private long _framesScheduled;
     private long _framesSent;
@@ -129,6 +142,7 @@ public sealed class TimingStatistics
     {
         lock (_gate)
         {
+            _statisticsGeneration++;
             _framesScheduled = 0;
             _framesSent = 0;
             _sendErrors = 0;
@@ -141,6 +155,9 @@ public sealed class TimingStatistics
             _timeNext = 0;
             _timeFilled = 0;
             _lastSendSeconds = double.NegativeInfinity;
+            _lastPercentileRequestSeconds = double.NegativeInfinity;
+            _percentileCalculationQueued = false;
+            _percentiles = default;
         }
     }
 
@@ -149,14 +166,25 @@ public sealed class TimingStatistics
     /// </param>
     public TimingSnapshot Snapshot(double nowSeconds)
     {
-        double[] sample;
+        double[]? sample = null;
         long framesScheduled, framesSent, sendErrors, queueFull, jitterSamples;
         double maxJitter, sumJitter, rate;
+        Percentiles percentiles;
+        long generation = 0;
 
         lock (_gate)
         {
-            sample = new double[_filled];
-            Array.Copy(_window, sample, _filled);
+            if (_filled > 0 && !_percentileCalculationQueued &&
+                nowSeconds - _lastPercentileRequestSeconds >= PercentileRefreshSeconds)
+            {
+                sample = CopyPercentileSampleLocked();
+                _lastPercentileRequestSeconds = nowSeconds;
+                generation = _statisticsGeneration;
+                if (sample.Length > SynchronousPercentileSampleLimit)
+                {
+                    _percentileCalculationQueued = true;
+                }
+            }
             framesScheduled = _framesScheduled;
             framesSent = _framesSent;
             sendErrors = _sendErrors;
@@ -165,9 +193,27 @@ public sealed class TimingStatistics
             maxJitter = _maxJitterMs;
             sumJitter = _sumJitterMs;
             rate = FramesPerSecondLocked(nowSeconds);
+            percentiles = _percentiles;
         }
 
-        Array.Sort(sample);
+        if (sample is { } captured)
+        {
+            if (captured.Length <= SynchronousPercentileSampleLimit)
+            {
+                percentiles = CalculatePercentiles(captured);
+                lock (_gate)
+                {
+                    if (generation == _statisticsGeneration)
+                    {
+                        _percentiles = percentiles with { SampleCount = _filled };
+                    }
+                }
+            }
+            else
+            {
+                ThreadPool.QueueUserWorkItem(_ => RefreshPercentiles(captured, generation));
+            }
+        }
 
         return new TimingSnapshot(
             FramesScheduled: framesScheduled,
@@ -176,11 +222,56 @@ public sealed class TimingStatistics
             TransmitQueueFullEvents: queueFull,
             FramesPerSecond: rate,
             AverageJitterMs: jitterSamples > 0 ? sumJitter / jitterSamples : 0,
-            JitterP50Ms: Percentile(sample, 0.50),
-            JitterP95Ms: Percentile(sample, 0.95),
-            JitterP99Ms: Percentile(sample, 0.99),
+            JitterP50Ms: percentiles.P50,
+            JitterP95Ms: percentiles.P95,
+            JitterP99Ms: percentiles.P99,
             MaxJitterMs: maxJitter,
-            JitterSampleCount: sample.Length);
+            JitterSampleCount: percentiles.SampleCount);
+    }
+
+    private void RefreshPercentiles(double[] sample, long generation)
+    {
+        var percentiles = CalculatePercentiles(sample);
+        lock (_gate)
+        {
+            if (generation == _statisticsGeneration)
+            {
+                _percentiles = percentiles with { SampleCount = _filled };
+            }
+
+            _percentileCalculationQueued = false;
+        }
+    }
+
+    private static Percentiles CalculatePercentiles(double[] sample)
+    {
+        Array.Sort(sample);
+        return new Percentiles(
+            Percentile(sample, 0.50),
+            Percentile(sample, 0.95),
+            Percentile(sample, 0.99),
+            sample.Length);
+    }
+
+    private double[] CopyPercentileSampleLocked()
+    {
+        var take = Math.Min(_filled, PercentileSampleLimit);
+        var sample = new double[take];
+        if (take == _filled)
+        {
+            Array.Copy(_window, sample, take);
+            return sample;
+        }
+
+        // The ring's physical order is irrelevant for percentiles. Selecting
+        // evenly spaced slots preserves a representative distribution while
+        // bounding periodic allocation and sorting work.
+        for (var i = 0; i < take; i++)
+        {
+            sample[i] = _window[(int)((long)i * _filled / take)];
+        }
+
+        return sample;
     }
 
     /// <summary>Frames per second over the trailing window; 0 while stalled.</summary>
@@ -235,6 +326,8 @@ public sealed class TimingStatistics
         var rank = (int)Math.Ceiling(fraction * sorted.Length) - 1;
         return sorted[Math.Clamp(rank, 0, sorted.Length - 1)];
     }
+
+    private readonly record struct Percentiles(double P50, double P95, double P99, int SampleCount);
 }
 
 public readonly record struct TimingSnapshot(

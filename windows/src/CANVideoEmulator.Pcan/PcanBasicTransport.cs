@@ -21,6 +21,7 @@ public sealed class PcanBasicTransport : ICanTransport
     private readonly object _gate = new();
     private readonly PcanChannel _channel;
     private readonly Bitrate _bitrate;
+    private readonly PcanMessage _message = new(0, MessageType.Standard, 0, new byte[8], isFD: false);
 
     private bool _open;
     private CanTransportStatus _status;
@@ -165,12 +166,23 @@ public sealed class PcanBasicTransport : ICanTransport
                 type |= MessageType.RemoteRequest;
             }
 
-            var message = new PcanMessage(frame.CanId, type, frame.Dlc, frame.ToArray(), isFD: false);
+            // Api.Write completes before returning and every send is serialized
+            // by _gate, so this one mutable message is safe to reuse. Avoiding a
+            // PcanMessage and byte[] allocation for every frame prevents Gen0 GC
+            // pauses from becoming visible as periodic gaps on the CAN bus.
+            _message.ID = frame.CanId;
+            _message.MsgType = type;
+            _message.DLC = frame.Dlc;
+            var data = frame.Data;
+            for (var index = 0; index < data.Length; index++)
+            {
+                _message.Data[index] = data[index];
+            }
 
             PcanStatus status;
             try
             {
-                status = Api.Write(_channel, message);
+                status = Api.Write(_channel, _message);
             }
             catch (Exception error) when (PcanEnvironment.IsNativeLoadFailure(error))
             {

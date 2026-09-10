@@ -64,7 +64,7 @@ def build(scenarios: Sequence[dict], *, featured_count: int = 10) -> dict:
 
     return {
         "format_version": PLAYLIST_FORMAT_VERSION,
-        "default_playlist": "featured",
+        "default_playlist": "all",
         "playlists": playlists,
     }
 

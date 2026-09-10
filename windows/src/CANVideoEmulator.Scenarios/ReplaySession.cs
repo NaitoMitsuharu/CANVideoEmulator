@@ -60,6 +60,8 @@ public sealed class ReplaySessionOptions
 /// </remarks>
 public sealed class ReplaySession : IAsyncDisposable
 {
+    private static readonly TimeSpan VideoSyncCheckInterval = TimeSpan.FromMilliseconds(250);
+
     private readonly PlaybackClock _clock;
     private readonly CanScheduler _scheduler;
     private readonly IVideoPlayer _video;
@@ -72,6 +74,7 @@ public sealed class ReplaySession : IAsyncDisposable
     private ScenarioPackage? _current;
     private int _selectedBus;
     private bool _completionHandled;
+    private TimeSpan _nextVideoSyncCheck;
 
     public ReplaySession(PlaybackClock clock, CanScheduler scheduler, IVideoPlayer video,
                          ScenarioLibrary library, ReplaySessionOptions? options = null,
@@ -231,6 +234,7 @@ public sealed class ReplaySession : IAsyncDisposable
         _clock.Duration = package.Duration;
         _clock.Stop();
         _drift.Reset();
+        _nextVideoSyncCheck = TimeSpan.Zero;
 
         OpenVideo(package);
 
@@ -355,6 +359,7 @@ public sealed class ReplaySession : IAsyncDisposable
         _scheduler.Start(anchor);
         _clock.Play();
         _video.Play();
+        _nextVideoSyncCheck = TimeSpan.Zero;
     }
 
     /// <summary>Requirement 8: freeze both media and stop transmitting.</summary>
@@ -390,6 +395,7 @@ public sealed class ReplaySession : IAsyncDisposable
         }
 
         _drift.Reset();
+        _nextVideoSyncCheck = TimeSpan.Zero;
     }
 
     /// <summary>
@@ -422,6 +428,7 @@ public sealed class ReplaySession : IAsyncDisposable
         _clock.SetPosition(clamped);
         _video.Seek(VideoPositionFor(clamped, package));
         _drift.Reset();
+        _nextVideoSyncCheck = TimeSpan.Zero;
 
         if (wasPlaying)
         {
@@ -588,11 +595,18 @@ public sealed class ReplaySession : IAsyncDisposable
             return;
         }
 
+        var now = _monotonic();
+        if (now < _nextVideoSyncCheck)
+        {
+            return;
+        }
+
+        _nextVideoSyncCheck = now + VideoSyncCheckInterval;
         var target = VideoPositionFor(_clock.CurrentTime, package);
         _drift.Tolerance = Options.VideoSyncTolerance;
         _drift.Cooldown = Options.VideoSyncCooldown;
 
-        if (_drift.ShouldCorrect(_video.Position, target, _monotonic()))
+        if (_drift.ShouldCorrect(_video.Position, target, now))
         {
             _video.Seek(target);
         }

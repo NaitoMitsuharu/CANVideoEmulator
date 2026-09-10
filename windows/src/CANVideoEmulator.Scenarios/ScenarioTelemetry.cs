@@ -55,11 +55,17 @@ public sealed class ScenarioTelemetry
             var t = ReadArray(g, "t");
             if (t.Length > 0)
             {
+                // lat/lon are absent from older packages built before this field
+                // existed; keep them empty rather than padding with misleading 0,0.
+                var lat = ReadArray(g, "lat");
+                var lon = ReadArray(g, "lon");
                 gnss = new GnssTrack(
                     t,
                     ReadArrayAligned(g, "speed_kmh", t.Length),
                     ReadArrayAligned(g, "east_m", t.Length),
-                    ReadArrayAligned(g, "north_m", t.Length));
+                    ReadArrayAligned(g, "north_m", t.Length),
+                    lat.Length == t.Length ? lat : [],
+                    lon.Length == t.Length ? lon : []);
             }
         }
 
@@ -179,17 +185,26 @@ public sealed class ScenarioTelemetry
 }
 
 /// <summary>GNSS fixes projected to local metres; speed already in km/h.</summary>
-public sealed class GnssTrack(double[] t, double[] speedKmh, double[] eastM, double[] northM)
+public sealed class GnssTrack(double[] t, double[] speedKmh, double[] eastM, double[] northM,
+                               double[] latDeg, double[] lonDeg)
 {
     public double[] T { get; } = t;
     public double[] SpeedKmh { get; } = speedKmh;
     public double[] EastM { get; } = eastM;
     public double[] NorthM { get; } = northM;
+    public double[] LatDeg { get; } = latDeg;
+    public double[] LonDeg { get; } = lonDeg;
 
     public int Count => T.Length;
 
+    public bool HasLatLon => LatDeg.Length == T.Length && T.Length > 0;
+
     /// <summary>Interpolated speed (km/h) at scenario time <paramref name="at"/>.</summary>
     public double SpeedAt(double at) => ScenarioTelemetry.Interpolate(T, SpeedKmh, at);
+
+    /// <summary>Interpolated latitude/longitude (degrees) at scenario time <paramref name="at"/>, or NaN when unavailable.</summary>
+    public double LatAt(double at) => HasLatLon ? ScenarioTelemetry.Interpolate(T, LatDeg, at) : double.NaN;
+    public double LonAt(double at) => HasLatLon ? ScenarioTelemetry.Interpolate(T, LonDeg, at) : double.NaN;
 }
 
 /// <summary>One IMU stream: three device-frame axes [forward, right, down].</summary>

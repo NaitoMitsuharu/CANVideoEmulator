@@ -11,7 +11,7 @@ namespace CANVideoEmulator.Tests;
 /// </summary>
 internal sealed class RangeServer : IDisposable
 {
-    private readonly HttpListener _listener = new();
+    private HttpListener _listener = new();
     private readonly byte[] _payload;
     private readonly bool _supportsRange;
     private readonly CancellationTokenSource _stop = new();
@@ -34,6 +34,8 @@ internal sealed class RangeServer : IDisposable
             }
             catch (HttpListenerException) when (chosen < 18_900)
             {
+                _listener.Close();
+                _listener = new HttpListener();
                 chosen++;
             }
         }
@@ -70,22 +72,25 @@ internal sealed class RangeServer : IDisposable
             try
             {
                 var from = 0L;
+                var to = _payload.LongLength - 1;
                 var rangeHeader = context.Request.Headers["Range"];
                 if (_supportsRange && !string.IsNullOrEmpty(rangeHeader) &&
                     rangeHeader.StartsWith("bytes=", StringComparison.OrdinalIgnoreCase))
                 {
-                    var spec = rangeHeader["bytes=".Length..].Split('-')[0];
-                    long.TryParse(spec, out from);
+                    var spec = rangeHeader["bytes=".Length..].Split('-');
+                    long.TryParse(spec[0], out from);
+                    if (spec.Length > 1 && long.TryParse(spec[1], out var requestedTo))
+                        to = Math.Min(requestedTo, to);
                     context.Response.StatusCode = (int)HttpStatusCode.PartialContent;
                     context.Response.Headers["Content-Range"] =
-                        $"bytes {from}-{_payload.Length - 1}/{_payload.Length}";
+                        $"bytes {from}-{to}/{_payload.Length}";
                 }
                 else
                 {
                     context.Response.StatusCode = (int)HttpStatusCode.OK;
                 }
 
-                var slice = _payload.AsMemory((int)from);
+                var slice = _payload.AsMemory((int)from, checked((int)(to - from + 1)));
                 var limit = BreakAfterBytes is { } cap
                     ? (int)Math.Min(cap, slice.Length)
                     : slice.Length;

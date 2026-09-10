@@ -67,6 +67,35 @@ public class ScenarioTelemetryTests
     }
 
     [Fact]
+    public void LatLonAreInterpolatedWhenPresentAndNaNWhenMissing()
+    {
+        var withLatLon = WriteTelemetry("""
+        { "gnss": { "t": [0, 2], "speed_kmh": [0, 0], "east_m": [0, 0], "north_m": [0, 0],
+                    "lat": [35.0, 35.002], "lon": [139.0, 139.001] } }
+        """);
+        var withoutLatLon = WriteTelemetry("""
+        { "gnss": { "t": [0, 2], "speed_kmh": [0, 0], "east_m": [0, 0], "north_m": [0, 0] } }
+        """);
+        try
+        {
+            var withCoords = ScenarioTelemetry.Load(withLatLon).Gnss!;
+            Assert.True(withCoords.HasLatLon);
+            Assert.Equal(35.001, withCoords.LatAt(1), 6);
+            Assert.Equal(139.0005, withCoords.LonAt(1), 6);
+
+            var withoutCoords = ScenarioTelemetry.Load(withoutLatLon).Gnss!;
+            Assert.False(withoutCoords.HasLatLon);
+            Assert.True(double.IsNaN(withoutCoords.LatAt(1)));
+            Assert.True(double.IsNaN(withoutCoords.LonAt(1)));
+        }
+        finally
+        {
+            File.Delete(withLatLon);
+            File.Delete(withoutLatLon);
+        }
+    }
+
+    [Fact]
     public void MissingGnssOrImuJustLeavesThatHalfEmpty()
     {
         var path = WriteTelemetry("""{ "format_version": 1 }""");

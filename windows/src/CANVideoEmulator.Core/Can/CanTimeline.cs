@@ -23,11 +23,18 @@ public sealed class CanTimeline
     private static ReadOnlySpan<byte> Magic => "CANBIN\0\0"u8;
 
     private readonly CanFrame[] _frames;
+    private readonly long[] _estimatedWireBitPrefix;
 
     private CanTimeline(CanFrame[] frames, int busIndex, ushort formatVersion,
                         bool containsTxEcho)
     {
         _frames = frames;
+        _estimatedWireBitPrefix = new long[frames.Length + 1];
+        for (var index = 0; index < frames.Length; index++)
+        {
+            _estimatedWireBitPrefix[index + 1] = _estimatedWireBitPrefix[index]
+                + EstimatedWireBits(frames[index]);
+        }
         BusIndex = busIndex;
         FormatVersion = formatVersion;
         ContainsTxEcho = containsTxEcho;
@@ -47,6 +54,46 @@ public sealed class CanTimeline
     public ReadOnlySpan<CanFrame> Frames => _frames;
 
     public CanFrame this[int index] => _frames[index];
+
+    /// <summary>
+    /// Estimated classical-CAN wire bits in a time window, excluding TX echoes
+    /// when they are not replayed. Uses prefix sums so HUD updates stay O(log n).
+    /// </summary>
+    public long EstimatedWireBits(TimeSpan start, TimeSpan end, bool includeTxEcho = true)
+    {
+        if (end <= start || _frames.Length == 0)
+        {
+            return 0;
+        }
+
+        var startIndex = IndexAtOrAfter(start);
+        var endIndex = IndexAtOrAfter(end);
+        if (includeTxEcho)
+        {
+            return _estimatedWireBitPrefix[endIndex] - _estimatedWireBitPrefix[startIndex];
+        }
+
+        long total = 0;
+        for (var index = startIndex; index < endIndex; index++)
+        {
+            if (!_frames[index].IsTxEcho)
+            {
+                total += EstimatedWireBits(_frames[index]);
+            }
+        }
+
+        return total;
+    }
+
+    private static int EstimatedWireBits(in CanFrame frame)
+    {
+        // SOF through intermission, without variable bit stuffing. Extended
+        // arbitration adds 20 bits compared with standard arbitration.
+        const int StandardFrameBits = 47;
+        const int ExtendedArbitrationExtraBits = 20;
+        return StandardFrameBits + (frame.IsExtended ? ExtendedArbitrationExtraBits : 0)
+            + frame.Dlc * 8;
+    }
 
     public static CanTimeline Empty(int busIndex) =>
         new([], busIndex, SupportedFormatVersion, false);

@@ -14,7 +14,7 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import analyze_cli, builder, canbin, comma2k19, playlists, telemetry, validation
+from . import analyze_cli, builder, canbin, comma2k19, playlists, stress, telemetry, validation
 from .dbc import parse as parse_dbc
 from .progress import report as report_progress
 
@@ -250,6 +250,20 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def cmd_stress(args: argparse.Namespace) -> int:
+    path = stress.build_package(
+        args.source, args.output, scenario_id=args.scenario_id,
+        duration_sec=args.duration, target_wire_bps=args.target_load,
+        playback_bitrate=args.playback_bitrate, bus=args.bus)
+    document = json.loads((path / "scenario.json").read_text(encoding="utf-8"))
+    details = document["stress_test"]
+    print(f"Wrote {path}")
+    print(f"  frames={document['bus_statistics'][0]['frame_count']} "
+          f"wire_load={details['calculated_wire_load_bps']:.3f} bit/s "
+          f"duration={document['duration_sec']:.3f}s")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="scenario_builder",
@@ -304,6 +318,18 @@ def main(argv: list[str] | None = None) -> int:
     verify_parser = sub.add_parser("verify", help="check a built Scenarios directory")
     verify_parser.add_argument("--input", required=True, type=Path)
     verify_parser.set_defaults(func=cmd_verify)
+
+    stress_parser = sub.add_parser("stress", help="build a high-load scenario package")
+    stress_parser.add_argument("--source", required=True, type=Path,
+                               help="existing RAV4 scenario package")
+    stress_parser.add_argument("--output", required=True, type=Path,
+                               help="Scenarios directory")
+    stress_parser.add_argument("--scenario-id", default="rav4_pcan_stress_450k_5min")
+    stress_parser.add_argument("--duration", type=float, default=300.0)
+    stress_parser.add_argument("--target-load", type=int, default=450_000)
+    stress_parser.add_argument("--playback-bitrate", type=int, default=500_000)
+    stress_parser.add_argument("--bus", type=int, default=0)
+    stress_parser.set_defaults(func=cmd_stress)
 
     args = parser.parse_args(argv)
     return args.func(args)

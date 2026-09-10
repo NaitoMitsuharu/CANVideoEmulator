@@ -38,6 +38,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private bool _suppressBusChange;
     private bool _refreshingPcanUi;
     private DateTime _nextPcanStatusUpdate;
+    private DateTime _nextRecentCanFlush;
+    private DateTime _lastUiTick;
     private bool _disposed;
 
     public MainViewModel(AppSettings settings, AppLog log, IVideoPlayer video)
@@ -54,9 +56,10 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         _transport.Open();
 
         _scheduler = new CanScheduler(_clock, _transport);
-        _scheduler.FrameSent += frame => RecentCan.Add(in frame);
+        _scheduler.FrameSent += frame => { RecentCan.Add(in frame); _liveSignals.OnFrame(in frame); };
         _scheduler.SendFailed += OnSendFailed;
         _scheduler.BusHealthChanged += status => Dispatch(() => HandleBusStatus(status));
+        _scheduler.TimingAnomaly += message => _log.Warning($"CAN timing: {message}");
 
         _library = LoadLibrary(settings.EffectiveScenarioDirectory);
         _session = CreateSession();
@@ -79,7 +82,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         SkipForwardCommand = new RelayCommand(() => Run(() => _session.SkipForward()));
         SkipBackwardCommand = new RelayCommand(() => Run(() => _session.SkipBackward()));
         ReloadScenariosCommand = new RelayCommand(ReloadScenarios);
-        _uiTimer = new DispatcherTimer(DispatcherPriority.Render)
+        _uiTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromMilliseconds(1000.0 / RecentCanMonitor.RefreshHz),
         };
@@ -102,6 +105,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public ObservableCollection<PcanChannelDescriptor> PcanChannels { get; } = [];
 
     public RecentCanMonitor RecentCan { get; } = new();
+
+    private readonly LiveSignalMonitor _liveSignals = new();
 
     public static IReadOnlyList<int> Bitrates => PcanBasicTransport.SupportedBitrates;
 
@@ -386,14 +391,6 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     /// <summary>Show the map / speed / IMU overlay on the video.</summary>
     public bool ShowOverlay { get => _showOverlay; set => Set(ref _showOverlay, value); }
 
-    private bool _mapHeadingUp = true;
-    /// <summary>Rotate the trajectory map so the direction of travel points up.</summary>
-    public bool MapHeadingUp { get => _mapHeadingUp; set => Set(ref _mapHeadingUp, value); }
-
-    private bool _mapAutoZoom = true;
-    /// <summary>Zoom the map out with speed, like a car navigator.</summary>
-    public bool MapAutoZoom { get => _mapAutoZoom; set => Set(ref _mapAutoZoom, value); }
-
     private string _positionText = "00:00";
     public string PositionText { get => _positionText; private set => Set(ref _positionText, value); }
 
@@ -517,6 +514,13 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         private set => Set(ref _busStatisticsText, value);
     }
 
+    private double _busLoadFraction;
+    /// <summary>Estimated bus load during the trailing one-second playback window.</summary>
+    public double BusLoadFraction { get => _busLoadFraction; private set => Set(ref _busLoadFraction, value); }
+
+    private string _busLoadPercentText = string.Empty;
+    public string BusLoadPercentText { get => _busLoadPercentText; private set => Set(ref _busLoadPercentText, value); }
+
     // -- HUD telemetry overlay (map, speed, IMU graphs) -----------------------
 
     private GnssTrack? _gnss;
@@ -558,6 +562,31 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private string _speedText = "--";
     /// <summary>Interpolated GNSS speed in km/h, shown inside the map.</summary>
     public string SpeedText { get => _speedText; private set => Set(ref _speedText, value); }
+
+    private string _latLngText = "--";
+    /// <summary>Interpolated GNSS latitude/longitude, shown inside the map.</summary>
+    public string LatLngText { get => _latLngText; private set => Set(ref _latLngText, value); }
+
+    // -- Live signal ticker (DBC-decoded, next to Recent CAN) ------------------
+
+    private bool _hasLiveSignals;
+    /// <summary>True when the scenario's DBC matched and the default bus is selected.</summary>
+    public bool HasLiveSignals { get => _hasLiveSignals; private set => Set(ref _hasLiveSignals, value); }
+
+    private string _liveSpeedText = "--";
+    public string LiveSpeedText { get => _liveSpeedText; private set => Set(ref _liveSpeedText, value); }
+
+    private string _liveSteeringText = "--";
+    public string LiveSteeringText { get => _liveSteeringText; private set => Set(ref _liveSteeringText, value); }
+
+    private string _liveBrakeText = "--";
+    public string LiveBrakeText { get => _liveBrakeText; private set => Set(ref _liveBrakeText, value); }
+
+    private string _liveGasText = "--";
+    public string LiveGasText { get => _liveGasText; private set => Set(ref _liveGasText, value); }
+
+    private string _liveCruiseText = "--";
+    public string LiveCruiseText { get => _liveCruiseText; private set => Set(ref _liveCruiseText, value); }
 
     public string ScenarioDirectory => _settings.EffectiveScenarioDirectory;
 
@@ -719,6 +748,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         DurationText = Format(package.Duration);
         RecentCan.Clear();
         LoadTelemetryOverlay(package);
+        RefreshLiveSignals();
         // Only re-filter when a playlist actually narrows the grid: the "keep the
         // playing card visible" bypass changes which card is exempt as the
         // current scenario moves. With no membership filter the visible set can't
@@ -778,10 +808,28 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         HasImuOverlay = telemetry?.HasImu == true;
         TelemetryTime = 0;
         SpeedText = "--";
+        LatLngText = "--";
     }
 
     private static ImuSeries? FindImu(ScenarioTelemetry? telemetry, string label) =>
         telemetry?.Imu.FirstOrDefault(s => s.Label == label);
+
+    /// <summary>
+    /// (Re)load the live signal ticker's table. Only meaningful on
+    /// <see cref="ScenarioPackage.DefaultBus"/> -- that is the bus the DBC
+    /// profile was actually matched and scored against (requirement 35); a
+    /// different bus's frame IDs would decode against the wrong layout.
+    /// </summary>
+    private void RefreshLiveSignals()
+    {
+        var package = _session.Current;
+        var table = package is not null && SelectedBus == package.DefaultBus
+            ? package.Signals
+            : null;
+        _liveSignals.LoadTable(table);
+        HasLiveSignals = table is not null;
+        LiveSpeedText = LiveSteeringText = LiveBrakeText = LiveGasText = LiveCruiseText = "--";
+    }
 
     private void OnBusChanged(int bus)
     {
@@ -796,7 +844,26 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             : $"{statistics.FrameCount:N0} frames · {statistics.FramesPerSecond:F0} fps · " +
               $"{statistics.UniqueCanIds} IDs · avg DLC {statistics.AverageDlc:F2} · " +
               $"~{statistics.EstimatedBusLoadBps / 1000.0:F0} kbit/s";
+        UpdateBusLoad(_clock.CurrentTime);
         RecentCan.Clear();
+        RefreshLiveSignals();
+    }
+
+    private void UpdateBusLoad(TimeSpan position)
+    {
+        var timeline = _scheduler.Timeline;
+        if (_session.Current is null || timeline.Count == 0)
+        {
+            BusLoadFraction = 0;
+            BusLoadPercentText = string.Empty;
+            return;
+        }
+
+        var windowStart = position - TimeSpan.FromSeconds(1);
+        var estimatedBits = timeline.EstimatedWireBits(windowStart, position, _session.Options.IncludeTxEcho);
+        var loadRatio = estimatedBits / (double)Bitrate;
+        BusLoadFraction = Math.Clamp(loadRatio, 0, 1);
+        BusLoadPercentText = $"{loadRatio * 100:F0}% of {Bitrate / 1000} kbit/s (last 1 s)";
     }
 
     private void OnSendFailed(string message) => Dispatch(() =>
@@ -928,8 +995,14 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             return;
         }
 
-        var status = _pcan.Transport?.RefreshStatus()
-                     ?? CanTransportStatus.NotConnected("no channel open");
+        // RefreshStatus enters PCAN-Basic synchronously and shares the transport
+        // lock with Send. During playback the scheduler owns the periodic health
+        // check, so the UI must read its cached status rather than periodically
+        // block CAN writes just to repaint this indicator.
+        var status = (_clock.IsPlaying
+            ? _pcan.Transport?.Status
+            : _pcan.Transport?.RefreshStatus())
+            ?? CanTransportStatus.NotConnected("no channel open");
         PcanHealth = status.Health;
         PcanStatusText = status.Health switch
         {
@@ -1031,7 +1104,20 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             return;
         }
 
+        var tickStarted = DateTime.UtcNow;
+        if (_lastUiTick != default)
+        {
+            var tickGap = tickStarted - _lastUiTick;
+            if (tickGap >= TimeSpan.FromMilliseconds(250))
+            {
+                _log.Warning($"UI timing: Dispatcher tick gap={tickGap.TotalMilliseconds:F1} ms");
+            }
+        }
+
+        _lastUiTick = tickStarted;
+
         var position = _clock.CurrentTime;
+        UpdateBusLoad(position);
         PositionText = Format(position);
         DurationText = Format(_clock.Duration);
         if (!_isScrubbing)
@@ -1046,6 +1132,19 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         {
             var kmh = gnss.SpeedAt(position.TotalSeconds);
             SpeedText = double.IsNaN(kmh) ? "--" : kmh.ToString("F0");
+            var lat = gnss.LatAt(position.TotalSeconds);
+            var lon = gnss.LonAt(position.TotalSeconds);
+            LatLngText = double.IsNaN(lat) || double.IsNaN(lon) ? "--" : $"{lat:F5}, {lon:F5}";
+        }
+
+        if (HasLiveSignals)
+        {
+            var reading = _liveSignals.Read();
+            LiveSpeedText = reading.SpeedText;
+            LiveSteeringText = reading.SteeringText;
+            LiveBrakeText = reading.BrakeText;
+            LiveGasText = reading.GasText;
+            LiveCruiseText = reading.CruiseText;
         }
 
         var state = _clock.State;
@@ -1073,11 +1172,18 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             RefreshPcanUi();
         }
 
-        RecentCan.Flush();
-        HasRecentCan = RecentCan.Rows.Count > 0;
-        RecentCanCaption = RecentCan.Observed == 0
-            ? $"newest {RecentCan.DisplayRows} frames"
-            : $"newest {RecentCan.Rows.Count} of {RecentCan.Observed:N0} frames seen";
+        // Replacing DataGrid rows is considerably more expensive than updating
+        // the compact overlay. Keep the live sample useful without competing
+        // with video presentation and CAN scheduling on every UI tick.
+        if (DateTime.UtcNow >= _nextRecentCanFlush)
+        {
+            _nextRecentCanFlush = DateTime.UtcNow.AddMilliseconds(200);
+            RecentCan.Flush();
+            HasRecentCan = RecentCan.Rows.Count > 0;
+            RecentCanCaption = RecentCan.Observed == 0
+                ? $"newest {RecentCan.DisplayRows} frames"
+                : $"newest {RecentCan.Rows.Count} of {RecentCan.Observed:N0} frames seen";
+        }
         _session.TickPlayback();
     }
 
