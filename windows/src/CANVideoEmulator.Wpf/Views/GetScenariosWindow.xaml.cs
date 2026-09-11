@@ -15,6 +15,7 @@ public partial class GetScenariosWindow : Window
     private readonly string _scenarioDirectory;
     public event EventHandler? ScenariosUpdated;
     private readonly DatasetDownloader _downloader = new();
+    private readonly RemoteZipSegmentDownloader _segmentDownloader = new();
     private readonly StringBuilder _logText = new();
     private CancellationTokenSource? _cancellation;
     private string _targetDirectory;
@@ -40,6 +41,8 @@ public partial class GetScenariosWindow : Window
     }
 
     private DatasetChunk[] Selected => ChunkList.SelectedItems.Cast<ChunkRow>().Select(row => row.File).ToArray();
+    private bool IsPartialDownload => (DownloadMode.SelectedItem as ComboBoxItem)?.Tag as string == "partial";
+    private int SegmentLimit => int.TryParse((SegmentCount.SelectedItem as ComboBoxItem)?.Tag as string, out var count) ? count : 3;
     private DatasetDownloadPlan Plan(IReadOnlyList<DatasetChunk> files, bool example = false) =>
         DatasetDownloadPlan.Create(files, _targetDirectory, _knownDirectories, example);
 
@@ -53,9 +56,13 @@ public partial class GetScenariosWindow : Window
         var sample = Plan(DatasetCatalog.ExampleFiles, true);
         foreach (var item in Plan(DatasetCatalog.Chunks).Items)
             _rows.First(row => row.File.Id == item.File.Id).Update(item);
-        SelectionSummary.Text = $"{selected.Length} selected · {plan.Items.Count(item => item.IsComplete)} downloaded · {plan.RemainingBytes / 1e9:0.00} GB remaining";
+        SelectionSummary.Text = IsPartialDownload
+            ? $"{selected.Length} chunk(s) selected · {SegmentLimit} scenario(s) per chunk · ZIP archives are not downloaded"
+            : $"{selected.Length} selected · {plan.Items.Count(item => item.IsComplete)} downloaded · {plan.RemainingBytes / 1e9:0.00} GB remaining";
         DownloadButton.IsEnabled = selected.Length > 0 && _cancellation is null;
-        DownloadButton.Content = plan.IsComplete ? "Convert Selected" : "Download & Convert";
+        DownloadButton.Content = IsPartialDownload ? "Download Selected Scenarios & Convert"
+            : plan.IsComplete ? "Convert Selected" : "Download & Convert";
+        SegmentCount.IsEnabled = IsPartialDownload && _cancellation is null;
         ExampleButton.IsEnabled = _cancellation is null;
         ExampleButton.Content = sample.IsComplete ? "Add Sample" : "Get 45 MB Sample";
         SampleStatus.Text = $"45 MB sample · {sample.Items.Count(item => item.IsComplete)}/{sample.Items.Count} files downloaded · {sample.Items[0].Directory}";
@@ -63,7 +70,8 @@ public partial class GetScenariosWindow : Window
         try
         {
             var root = Path.GetPathRoot(Path.GetFullPath(_targetDirectory));
-            var needed = plan.RemainingBytes + plan.Items.Where(item => !item.IsComplete).Sum(item => item.File.SizeBytes);
+            var needed = IsPartialDownload ? 0
+                : plan.RemainingBytes + plan.Items.Where(item => !item.IsComplete).Sum(item => item.File.SizeBytes);
             if (root is not null && new DriveInfo(root).AvailableFreeSpace < needed)
             {
                 SpaceWarning.Text = $"Allow about {needed / 1e9:0.0} GB more for downloads and extraction. The 45 MB sample needs much less.";
@@ -75,6 +83,7 @@ public partial class GetScenariosWindow : Window
     }
 
     private void OnChunkSelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateTarget();
+    private void OnDownloadModeChanged(object sender, SelectionChangedEventArgs e) => UpdateTarget();
 
     private void OnChangeFolderClick(object sender, RoutedEventArgs e)
     {
@@ -129,6 +138,11 @@ public partial class GetScenariosWindow : Window
             DownloadStageText.Text = "Checking conversion tools before downloading…";
             await ScenarioConverter.ConvertAsync(script, "", _scenarioDirectory,
                 new Progress<string>(Append), cancellation, checkOnly: true);
+            if (!example && IsPartialDownload)
+            {
+                await DownloadSelectedSegmentsAsync(files, plan, script, cancellation);
+                return;
+            }
             DownloadStageText.Text = "Downloading missing files…";
             for (var i = 0; i < files.Count; i++)
             {
@@ -231,6 +245,66 @@ public partial class GetScenariosWindow : Window
         }
     }
 
+    private async Task DownloadSelectedSegmentsAsync(IReadOnlyList<DatasetChunk> files,
+        DatasetDownloadPlan plan, string script, CancellationToken cancellation)
+    {
+        var inputs = new List<string>();
+        for (var chunkIndex = 0; chunkIndex < files.Count; chunkIndex++)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            var file = files[chunkIndex];
+            var item = plan.Items[chunkIndex];
+            DownloadStageText.Text = $"Reading {file.Title} index…";
+            Append($"INDEX — {file.FileName} (the full ZIP is not downloaded)");
+            var index = await _segmentDownloader.ReadIndexAsync(file, cancellation);
+            var selected = index.Segments.Take(SegmentLimit).ToArray();
+            if (selected.Length == 0)
+                throw new InvalidDataException($"No complete scenarios were found in {file.FileName}.");
+            var extractionRoot = Path.Combine(item.Directory,
+                Path.GetFileNameWithoutExtension(file.FileName) + "_extracted");
+            for (var segmentIndex = 0; segmentIndex < selected.Length; segmentIndex++)
+            {
+                var segment = selected[segmentIndex];
+                var currentChunk = chunkIndex;
+                var currentSegment = segmentIndex;
+                var label = $"Chunk {chunkIndex + 1}/{files.Count} · scenario {segmentIndex + 1}/{selected.Length}";
+                DownloadStageText.Text = $"{label} · {segment.Route} #{segment.SegmentIndex}";
+                var segmentProgress = new Progress<DownloadProgress>(update =>
+                {
+                    Progress.Value = (currentChunk + (currentSegment + update.Fraction) / selected.Length) / files.Count;
+                    ProgressText.Text = $"{label} · {update.BytesReceived / 1e6:0.0} / {update.TotalBytes / 1e6:0.0} MB";
+                });
+                var input = await _segmentDownloader.DownloadAsync(file, segment,
+                    extractionRoot, segmentProgress, cancellation);
+                inputs.Add(input);
+                Append($"Downloaded source: {segment.Route} segment {segment.SegmentIndex}");
+            }
+        }
+
+        DownloadStageText.Text = $"Complete — {inputs.Count} scenario source(s) cached without full ZIP files.";
+        Progress.Value = 1;
+        for (var inputIndex = 0; inputIndex < inputs.Count; inputIndex++)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            var input = inputs[inputIndex];
+            ConvertStageText.Text = $"Converting {Path.GetFileName(input)} — completed scenarios are reused.";
+            var conversionLog = new Progress<string>(line => { Append(line); _log.Info($"convert: {line}"); });
+            var progressIndex = inputIndex;
+            var measured = new Progress<ConversionProgressUpdate>(update =>
+            {
+                ConversionProgress.Value = (progressIndex + update.Fraction) / inputs.Count;
+                ConversionProgressText.Text = $"{Math.Min(99, Math.Floor(ConversionProgress.Value * 100)):0}% · Scenario {progressIndex + 1}/{inputs.Count} · {update.PhaseText}";
+            });
+            await ScenarioConverter.ConvertAsync(script, input, _scenarioDirectory,
+                conversionLog, cancellation, measured);
+            ConversionProgress.Value = (inputIndex + 1.0) / inputs.Count;
+            ScenariosUpdated?.Invoke(this, EventArgs.Empty);
+        }
+        ConversionProgress.Value = 1;
+        ConversionProgressText.Text = "100% · Conversion and verification complete";
+        ConvertStageText.Text = "Complete — scenarios have been added to the player.";
+    }
+
     private void Append(string line)
     {
         _logText.AppendLine(line);
@@ -259,6 +333,7 @@ public partial class GetScenariosWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _downloader.Dispose();
+        _segmentDownloader.Dispose();
         base.OnClosed(e);
     }
 }

@@ -38,6 +38,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private bool _suppressBusChange;
     private bool _refreshingPcanUi;
     private DateTime _nextPcanStatusUpdate;
+    private DateTime _nextRecentCanFlush;
+    private DateTime _lastUiTick;
     private bool _disposed;
 
     public MainViewModel(AppSettings settings, AppLog log, IVideoPlayer video)
@@ -57,6 +59,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         _scheduler.FrameSent += frame => { RecentCan.Add(in frame); _liveSignals.OnFrame(in frame); };
         _scheduler.SendFailed += OnSendFailed;
         _scheduler.BusHealthChanged += status => Dispatch(() => HandleBusStatus(status));
+        _scheduler.TimingAnomaly += message => _log.Warning($"CAN timing: {message}");
 
         _library = LoadLibrary(settings.EffectiveScenarioDirectory);
         _session = CreateSession();
@@ -79,7 +82,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         SkipForwardCommand = new RelayCommand(() => Run(() => _session.SkipForward()));
         SkipBackwardCommand = new RelayCommand(() => Run(() => _session.SkipBackward()));
         ReloadScenariosCommand = new RelayCommand(ReloadScenarios);
-        _uiTimer = new DispatcherTimer(DispatcherPriority.Render)
+        _uiTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromMilliseconds(1000.0 / RecentCanMonitor.RefreshHz),
         };
@@ -512,7 +515,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     }
 
     private double _busLoadFraction;
-    /// <summary>Recorded bus load over the configured bench bitrate, clamped to [0, 1] for a bar's width.</summary>
+    /// <summary>Estimated bus load during the trailing one-second playback window.</summary>
     public double BusLoadFraction { get => _busLoadFraction; private set => Set(ref _busLoadFraction, value); }
 
     private string _busLoadPercentText = string.Empty;
@@ -841,11 +844,26 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             : $"{statistics.FrameCount:N0} frames · {statistics.FramesPerSecond:F0} fps · " +
               $"{statistics.UniqueCanIds} IDs · avg DLC {statistics.AverageDlc:F2} · " +
               $"~{statistics.EstimatedBusLoadBps / 1000.0:F0} kbit/s";
-        var loadRatio = statistics is null ? 0.0 : statistics.EstimatedBusLoadBps / (double)Bitrate;
-        BusLoadFraction = Math.Clamp(loadRatio, 0, 1);
-        BusLoadPercentText = statistics is null ? string.Empty : $"{loadRatio * 100:F0}% of {Bitrate / 1000} kbit/s";
+        UpdateBusLoad(_clock.CurrentTime);
         RecentCan.Clear();
         RefreshLiveSignals();
+    }
+
+    private void UpdateBusLoad(TimeSpan position)
+    {
+        var timeline = _scheduler.Timeline;
+        if (_session.Current is null || timeline.Count == 0)
+        {
+            BusLoadFraction = 0;
+            BusLoadPercentText = string.Empty;
+            return;
+        }
+
+        var windowStart = position - TimeSpan.FromSeconds(1);
+        var estimatedBits = timeline.EstimatedWireBits(windowStart, position, _session.Options.IncludeTxEcho);
+        var loadRatio = estimatedBits / (double)Bitrate;
+        BusLoadFraction = Math.Clamp(loadRatio, 0, 1);
+        BusLoadPercentText = $"{loadRatio * 100:F0}% of {Bitrate / 1000} kbit/s (last 1 s)";
     }
 
     private void OnSendFailed(string message) => Dispatch(() =>
@@ -977,8 +995,14 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             return;
         }
 
-        var status = _pcan.Transport?.RefreshStatus()
-                     ?? CanTransportStatus.NotConnected("no channel open");
+        // RefreshStatus enters PCAN-Basic synchronously and shares the transport
+        // lock with Send. During playback the scheduler owns the periodic health
+        // check, so the UI must read its cached status rather than periodically
+        // block CAN writes just to repaint this indicator.
+        var status = (_clock.IsPlaying
+            ? _pcan.Transport?.Status
+            : _pcan.Transport?.RefreshStatus())
+            ?? CanTransportStatus.NotConnected("no channel open");
         PcanHealth = status.Health;
         PcanStatusText = status.Health switch
         {
@@ -1080,7 +1104,20 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             return;
         }
 
+        var tickStarted = DateTime.UtcNow;
+        if (_lastUiTick != default)
+        {
+            var tickGap = tickStarted - _lastUiTick;
+            if (tickGap >= TimeSpan.FromMilliseconds(250))
+            {
+                _log.Warning($"UI timing: Dispatcher tick gap={tickGap.TotalMilliseconds:F1} ms");
+            }
+        }
+
+        _lastUiTick = tickStarted;
+
         var position = _clock.CurrentTime;
+        UpdateBusLoad(position);
         PositionText = Format(position);
         DurationText = Format(_clock.Duration);
         if (!_isScrubbing)
@@ -1135,11 +1172,18 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             RefreshPcanUi();
         }
 
-        RecentCan.Flush();
-        HasRecentCan = RecentCan.Rows.Count > 0;
-        RecentCanCaption = RecentCan.Observed == 0
-            ? $"newest {RecentCan.DisplayRows} frames"
-            : $"newest {RecentCan.Rows.Count} of {RecentCan.Observed:N0} frames seen";
+        // Replacing DataGrid rows is considerably more expensive than updating
+        // the compact overlay. Keep the live sample useful without competing
+        // with video presentation and CAN scheduling on every UI tick.
+        if (DateTime.UtcNow >= _nextRecentCanFlush)
+        {
+            _nextRecentCanFlush = DateTime.UtcNow.AddMilliseconds(200);
+            RecentCan.Flush();
+            HasRecentCan = RecentCan.Rows.Count > 0;
+            RecentCanCaption = RecentCan.Observed == 0
+                ? $"newest {RecentCan.DisplayRows} frames"
+                : $"newest {RecentCan.Rows.Count} of {RecentCan.Observed:N0} frames seen";
+        }
         _session.TickPlayback();
     }
 
